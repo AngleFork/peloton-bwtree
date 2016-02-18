@@ -182,6 +182,10 @@ private:
       base = n;
     }
 
+    inline node *get_base() const {
+      return base;
+    }
+
     inline size_t get_length() const {
       return chain_length;
     }
@@ -315,7 +319,7 @@ public:
 
   /// Frees up all used B+ tree memory pages
   inline ~BWTree() {
-      // clear();
+    // clear();
   }
 
 private:
