@@ -223,25 +223,37 @@ private:
 
   struct mapping_table {
 
-    node** table = new node*[MAPPING_TABLE_SIZE];
+    node** table;
+
+    inline void initialize() {
+      table = new node*[MAPPING_TABLE_SIZE];
+    }
 
     // Atomically update the value using CAS
     inline void update(PID key, node* value) {
       for(;;) {
         if(__sync_bool_compare_and_swap(&table[key], table[key], value) == true) {
-          break;
+          break;  // Update success
         }
       }
     }
 
     // Mark as null if remove is called
     inline void remove(PID key) {
-      table[key] = NULL;
+      for(;;) {
+        if(__sync_bool_compare_and_swap(&table[key], table[key], NULL) == true) {
+          break;  // Update success
+        }
+      }
     }
 
     // Get physical pointer from PID
     inline node* get(PID key) {
       return table[key];
+    }
+
+    ~mapping_table(){
+      delete [] table;
     }
   };
 
