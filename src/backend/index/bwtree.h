@@ -433,22 +433,15 @@ private:
     return pid_counter;
   }
 
-//  inline PID allocate_pid() {
-//    PID pid = NULL_PID;
-//    while (mapping_table.find(++pid) == mapping_table.end())
-//      ;
-//    return pid;
-//  }
-//
-//  inline node *get_node(PID pid) {
-//    if (mapping_table.find(pid) == mapping_table.end())
-//      return NULL;
-//    return mapping_table[pid];
-//  }
-//
-//  inline void set_node(PID pid, node *n) {
-//    mapping_table[pid] = n;
-//  }
+  inline node *get_node(PID pid) {
+    if (mapping_table.get(pid) == NULL)
+      return NULL;
+    return mapping_table.get(pid);
+  }
+
+  inline void set_node(PID pid, node *n) {
+    mapping_table.update(pid, n);
+  }
 
 private:
   template <typename node_type>
