@@ -23,6 +23,7 @@
 
 #define BWTREE_MAX(a,b) ((a) < (b) ? (b) : (a))
 #define BWTREE_NODE_SIZE 256
+#define MAPPING_TABLE_SIZE 4194304
 
 namespace peloton {
 namespace index {
@@ -220,6 +221,31 @@ private:
     }
   };
 
+  struct mapping_table {
+
+    node** table = new node*[MAPPING_TABLE_SIZE];
+
+    // Atomically update the value using CAS
+    inline void update(PID key, node* value) {
+      for(;;) {
+        if(__sync_bool_compare_and_swap(&table[key], table[key], value) == true) {
+          break;
+        }
+      }
+    }
+
+    // Mark as null if remove is called
+    inline void remove(PID key) {
+      table[key] = NULL;
+    }
+
+    // Get physical pointer from PID
+    inline node* get(PID key) {
+      return table[key];
+    }
+  };
+
+
 private:
   // *** Tree Object Data Members
 
@@ -236,7 +262,10 @@ private:
   AllocType m_allocator;
 
   /// Mapping table
-  std::unordered_map<PID, node *> mapping_table;
+  mapping_table mapping_table;
+
+  /// Atomic counter for PID allocation
+  std::atomic<int> pid_counter;
 
 public:
 
@@ -309,7 +338,7 @@ private:
     leaf_node *n = new (leaf_node_allocator().allocate(1)) leaf_node();
     n->initialize();
     PID pid = allocate_pid();
-    mapping_table.insert(std::make_pair(pid, n));
+    mapping_table.update(pid, n);
     return pid;
   }
 
@@ -318,7 +347,7 @@ private:
     inner_node *n = new (inner_node_allocator().allocate(1)) inner_node();
     n->initialize(level);
     PID pid = allocate_pid();
-    mapping_table.insert(std::make_pair(pid, n));
+    mapping_table.update(pid, n);
     return pid;
   }
 
@@ -339,21 +368,26 @@ private:
 private:
 
   inline PID allocate_pid() {
-    PID pid = NULL_PID;
-    while (mapping_table.find(++pid) == mapping_table.end())
-      ;
-    return pid;
+    pid_counter++;
+    return pid_counter;
   }
 
-  inline node *get_node(PID pid) {
-    if (mapping_table.find(pid) == mapping_table.end())
-      return NULL;
-    return mapping_table[pid];
-  }
-
-  inline void set_node(PID pid, node *n) {
-    mapping_table[pid] = n;
-  }
+//  inline PID allocate_pid() {
+//    PID pid = NULL_PID;
+//    while (mapping_table.find(++pid) == mapping_table.end())
+//      ;
+//    return pid;
+//  }
+//
+//  inline node *get_node(PID pid) {
+//    if (mapping_table.find(pid) == mapping_table.end())
+//      return NULL;
+//    return mapping_table[pid];
+//  }
+//
+//  inline void set_node(PID pid, node *n) {
+//    mapping_table[pid] = n;
+//  }
 
 private:
   template <typename node_type>
