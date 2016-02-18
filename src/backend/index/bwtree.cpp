@@ -26,12 +26,12 @@ void BWTree<KeyType, ValueType, KeyComparator>::insert_data(const PairType &x) {
   ValueType value = x.second;
 
   PID curr_pid = m_root;
-  node *curr_node = get_node(m_root);
+  node *curr_node = mapping_table.get(m_root);
 
   while (!curr_node.is_leaf()) {
     unsigned short slot = find_lower(curr_node, key);
     curr_pid = curr_node->child_pid[slot];
-    curr_node = get_node(curr_pid);
+    curr_node = mapping_table.get(curr_pid);
   }
 
   insert_node *delta = allocate_insert(0, x, curr_node);
@@ -47,12 +47,12 @@ void BWTree<KeyType, ValueType, KeyComparator>::delete_key(const KeyType &x) {
   }
 
   PID curr_pid = m_root;
-  node *curr_node = get_node(m_root);
+  node *curr_node = mapping_table.get(m_root);
 
   while (!curr_node.is_leaf()) {
     unsigned short slot = find_lower(curr_node, x);
     curr_pid = curr_node->child_pid[slot];
-    curr_node = get_node(curr_pid);
+    curr_node = mapping_table.get(curr_pid);
   }
 
   delete_node *delta = allocate_delete(0, x, curr_node);

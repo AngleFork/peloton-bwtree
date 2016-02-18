@@ -20,6 +20,7 @@
 #include <cstddef>
 #include <assert.h>
 #include <unordered_map>
+#include <atomic>
 
 #define BWTREE_MAX(a,b) ((a) < (b) ? (b) : (a))
 #define BWTREE_NODE_SIZE 256
@@ -40,6 +41,15 @@ public:
 
   typedef size_t PID;
 
+  enum class NodeType {
+    leaf_node,
+    inner_node,
+    insert_node,
+    delete_node,
+    split_node,
+    separator_node
+  };
+
 public:
   // *** Static Constant Options and Values of the BW Tree
 
@@ -59,23 +69,48 @@ private:
   /// The header structure of each node in memory. This structure is extended
   /// by inner_node or leaf_node or delta_node.
   struct node {
+    NodeType node_type;
     unsigned short level;
     unsigned short slot_use;
-    bool is_delta;
 
-    inline void initialize(const unsigned short l, bool d) {
+    inline void initialize(NodeType n, unsigned short l, unsigned short s) {
+      node_type = n;
       level = l;
-      slot_use = 0;
-      is_delta = d;
+      slot_use = s;
     }
 
-    inline bool isleafnode() const {
+    inline bool is_leaf() const {
       return (level == 0);
     }
 
-    inline bool isdelta() const {
-      return is_delta;
+    inline bool is_delta() const {
+      return (node_type != NodeType::leaf_node && node_type != NodeType::inner_node);
     }
+
+    inline bool is_full() const {
+      return (node::slot_use == leaf_slot_max);
+    }
+
+    inline bool is_few() const {
+      return (node::slot_use <= min_leaf_slots);
+    }
+
+    inline bool is_underflow() const {
+      return (node::slot_use < min_leaf_slots);
+    }
+
+    inline unsigned short get_level() const {
+      return level;
+    }
+
+    inline size_t get_size() const {
+      return slot_use;
+    }
+
+    inline void add_slotuse() {
+      slot_use++;
+    }
+
   };
 
   /// Extended structure of a inner node in memory. Contains only keys and no
@@ -88,20 +123,15 @@ private:
 
     PID child_pid[inner_slot_max + 1];
 
-    inline void initialize(const unsigned short l) {
-      node::initialize(l, false);
+    inline void initialize(unsigned short l) {
+      node::initialize(NodeType::inner_node, l, 0);
     }
 
-    inline bool isfull() const {
-      return (node::slot_use == inner_slot_max);
-    }
-
-    inline bool isfew() const {
-      return (node::slot_use <= min_inner_slots);
-    }
-
-    inline bool isunderflow() const {
-      return (node::slot_use < min_inner_slots);
+    inline void set_slot(unsigned short slot, KeyType k, PID p) {
+      if (slot >= node::get_size())
+          node::add_slotuse();
+      slot_key[slot] = k;
+      child_pid[slot] = p;
     }
   };
 
@@ -120,49 +150,40 @@ private:
     ValueType slot_data[leaf_slot_max];
 
     inline void initialize() {
-      node::initialize(0, false);
+      node::initialize(NodeType::leaf_node, 0, 0);
       prev_leaf = next_leaf = NULL_PID;
     }
 
-    inline bool isfull() const {
-      return (node::slot_use == leaf_slot_max);
-    }
-
-    inline bool isfew() const {
-      return (node::slot_use <= min_leaf_slots);
-    }
-
-    inline bool isunderflow() const {
-      return (node::slot_use < min_leaf_slots);
-    }
-
     inline void set_slot(unsigned short slot, const PairType &pair) {
+      if (slot >= node::get_size())
+          node::add_slotuse();
       slot_key[slot] = pair.first;
       slot_data[slot] = pair.second;
     }
 
-    inline void set_slot(unsigned short slot, const KeyType &key) {
-      slot_key[slot] = key;
-    }
   };
 
   /// Extended structure of a delta node in memory. Contains a physical
   /// pointer to base page.
   struct delta_node : public node {
     node *base;
+    size_t chain_length;
 
-    inline void initialize(const unsigned short l) {
-      node::initialize(l, true);
-      base = NULL;
+    inline void initialize(NodeType t, unsigned short s, node *n) {
+      base = n;
+      chain_length = 0;
+      if (base->is_delta()) {
+        chain_length = static_cast<delta_node *>(base)->get_length() + 1;
+      }
+      node::initialize(t, base->get_level(), s);
     }
 
-    inline void initialize(const unsigned short l, const node *n) {
-      node::initialize(l, true);
+    inline void set_base(node *n) {
       base = n;
     }
 
-    inline void set_base(const node *n) {
-      base = n;
+    inline size_t get_length() const {
+      return chain_length;
     }
   };
 
@@ -174,10 +195,10 @@ private:
     KeyType insert_key;
     ValueType insert_value;
 
-    inline void initialize(const unsigned short l, const PairType &pair) {
-      delta_node::initialize(l);
+    inline void initialize(const PairType &pair, node *n) {
       insert_key = pair.first;
       insert_value = pair.second;
+      delta_node::initialize(NodeType::insert_node, n->get_size() + 1, n);
     }
   };
 
@@ -187,37 +208,41 @@ private:
 
     KeyType delete_key;
 
-    inline void initialize(const unsigned short l, const KeyType &key) {
-      delta_node::initialize(l);
+    inline void initialize(const KeyType &key, node *n) {
       delete_key = key;
+      delta_node::initialize(NodeType::delete_node, n->get_size() - 1, n);
     }
   };
 
   /// Extended structure of a delta node in memory. Contains a split key
   /// and a logical side pointer.
   struct split_node : public delta_node {
+    typedef typename AllocType::template rebind<split_node>::other alloc_type;
+
     KeyType split_key;
     PID side;
 
-    inline void initialize(const unsigned short l, const KeyType &key, const PID pid) {
-      delta_node::initialize(l);
+    inline void initialize(const KeyType &key, PID pid, unsigned short s, node *n) {
       split_key = key;
       side = pid;
+      delta_node::initialize(NodeType::split_node, s, n);
     }
   };
 
   /// Extended structure of a delta node in memory. Contains a key range
   /// [min_key, max_key) and a logical pointer to the leaf.
   struct separator_node : public delta_node {
+    typedef typename AllocType::template rebind<separator_node>::other alloc_type;
+
     KeyType min_key;
     KeyType max_key;
     PID leaf;
 
-    inline void initialize(const unsigned short l, const KeyType &left_key, const KeyType &right_key, const PID pid) {
-      delta_node::initialize(l);
+    inline void initialize(const KeyType &left_key, const KeyType &right_key, const PID pid, node *n) {
       min_key = left_key;
       max_key = right_key;
       leaf = pid;
+      delta_node::initialize(NodeType::separator_node, n->get_size() + 1, n);
     }
   };
 
@@ -335,14 +360,24 @@ private:
     return typename inner_node::alloc_type(m_allocator);
   }
 
-  /// Return an allocator for inner_node objects
+  /// Return an allocator for insert_node objects
   typename insert_node::alloc_type insert_node_allocator() {
     return typename insert_node::alloc_type(m_allocator);
   }
 
-  /// Return an allocator for inner_node objects
+  /// Return an allocator for delete_node objects
   typename delete_node::alloc_type delete_node_allocator() {
     return typename delete_node::alloc_type(m_allocator);
+  }
+
+  /// Return an allocator for split_node objects
+  typename split_node::alloc_type split_node_allocator() {
+    return typename split_node::alloc_type(m_allocator);
+  }
+
+  /// Return an allocator for separator_node objects
+  typename separator_node::alloc_type separator_node_allocator() {
+    return typename separator_node::alloc_type(m_allocator);
   }
 
   /// Allocate and initialize a leaf node
@@ -364,16 +399,30 @@ private:
   }
 
   /// Allocate and initialize an insert delta node
-  inline insert_node *allocate_insert(unsigned short level, node *base) {
+  inline insert_node *allocate_insert(PairType &pair, node *base) {
     insert_node *n = new (insert_node_allocator().allocate(1)) insert_node();
-    n->initialize(level, base);
+    n->initialize(pair, base);
     return n;
   }
 
-  /// Allocate and initialize an insert delta node
-  inline delete_node *allocate_delete(unsigned short level, node *base) {
-    insert_node *n = new (insert_node_allocator().allocate(1)) delete_node();
-    n->initialize(level, base);
+  /// Allocate and initialize an delete delta node
+  inline delete_node *allocate_delete(KeyType &key, node *base) {
+    delete_node *n = new (delete_node_allocator().allocate(1)) delete_node();
+    n->initialize(key, base);
+    return n;
+  }
+
+  /// Allocate and initialize an split delta node
+  inline split_node *allocate_split(const KeyType &key, PID pid, unsigned short size, node *base) {
+    split_node *n = new (insert_node_allocator().allocate(1)) insert_node();
+    n->initialize(key, pid, size, base);
+    return n;
+  }
+
+  /// Allocate and initialize an separator delta node
+  inline separator_node *allocate_separator(const KeyType &left_key, const KeyType &right_key, const PID pid, node *base) {
+    split_node *n = new (insert_node_allocator().allocate(1)) insert_node();
+    n->initialize(left_key, right_key, pid, base);
     return n;
   }
 
@@ -405,7 +454,7 @@ private:
   template <typename node_type>
   inline unsigned short find_lower(const node_type *n, const KeyType &key) const{
     unsigned short lo = 0;
-    while (lo < n->slotuse && key_less(n->slotkey[lo], key)) ++lo;
+    while (lo < n->slot_use && key_less(n->slot_key[lo], key)) ++lo;
     return lo;
   }
 
