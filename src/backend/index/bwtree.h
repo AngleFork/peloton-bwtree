@@ -556,7 +556,7 @@ private:
 
   // Helper function for checking if the key is in the vector.
   inline bool vector_contains_key(std::vector<DataPairType> data, const KeyType &key) {
-    for (std::vector<DataPairType>::iterator it = data.begin() ; it != data.end(); ++it) {
+    for (auto it = data.begin() ; it != data.end(); ++it) {
       if(key_equal(key, it->first)) {
         return true;
       }
@@ -599,6 +599,7 @@ public:
   inline void split_leaf(PID pid);
   inline bool exists(const KeyType &key);
   inline std::vector<DataPairType> search(const KeyType &key);
+  inline std::vector<DataPairType> search_range(const KeyType &low_key, const KeyType &high_key);
   inline size_t count(const KeyType &key);
 
 };

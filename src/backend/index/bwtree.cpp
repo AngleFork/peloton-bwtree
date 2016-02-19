@@ -11,6 +11,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <unordered_set>
+#include <vector>
 
 #include "backend/index/bwtree.h"
 
@@ -150,13 +151,47 @@ std::vector<DataPairType> BWTree<KeyType, ValueType, KeyComparator>::search(cons
     return NULL;
   }
 
+  // Find the leaf node and retrieve all records in the node
   const leaf_node* node = static_cast<const leaf_node*>(mapping_table.get(leaf_pid));
-  int slot = find_lower(node, key);
-
   std::vector<DataPairType> node_data = get_all_data(node);
 
-  return node_data;
+  // Check if we have a match (possible improvement: implement binary search)
+  for (std::vector<DataPairType>::iterator it = node_data.begin() ; it != node_data.end(); ++it) {
+    // For duplicate keys, there's an edge case that some records can be placed at the
+    // next node so we need to check the next page as well.
+    if(it != node_data.end() && (next(it) == node_data.end()) && key_equal(key, it->first)) {
+      // TODO: handle duplicate keys
+    }
+    else if(key_equal(key, it->first)) {
+      result.push_back(static_cast<const DataPairType>(it));
+    }
+  }
+  return result;
 }
+
+template <typename KeyType, typename ValueType, class KeyComparator>
+std::vector<DataPairType> BWTree<KeyType, ValueType, KeyComparator>::search_range(const KeyType &low, const KeyType &high) {
+  std::vector<DataPairType> result;
+  PID low_pid = get_leaf_node_pid(low);
+  PID high_pid = get_leaf_node_pid(high);
+
+  if(low_pid < 0 || high_pid < 0) {
+    return NULL;
+  }
+
+  // Case 1. low not exists  (e.g where x < 5)
+
+  // Case 2. high not exists (e.g where x > 5)
+
+  // Case 3. low & high both exist (e.g where x > 5 and x < 10)
+  const leaf_node* low_node = static_cast<const leaf_node*>(mapping_table.get(low_pid));
+  const leaf_node* high_node = static_cast<const leaf_node*>(mapping_table.get(high_pid));
+  PID current_pid = low_pid;
+  
+
+
+}
+
 
 
 
