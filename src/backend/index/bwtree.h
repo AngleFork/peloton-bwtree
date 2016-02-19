@@ -552,13 +552,54 @@ private:
     }
     std::sort(result.begin(), result.end(), datapair_less);
     return result;
-}
+  }
 
+  // Helper function for checking if the key is in the vector.
+  inline bool vector_contains_key(std::vector<DataPairType> data, const KeyType &key) {
+    for (std::vector<DataPairType>::iterator it = data.begin() ; it != data.end(); ++it) {
+      if(key_equal(key, it->first)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Returns the pid of the page that contains the target key
+  // Currently, returns -1 for error
+  inline PID get_leaf_node_pid(const KeyType &key) {
+    PID current_pid = m_root;
+    node* current = mapping_table.get(m_root);
+
+    if(!current) return -1;
+
+    // Keep traversing tree until we find the target leaf node
+    while(!current->is_leaf()) {
+      NodeType current_type = current->get_type();
+      // We need to take care of delta nodes from split/merge and regular inner node
+      switch(current_type) {
+        case(NodeType::separator_node) :
+          break;
+        case(NodeType::split_node) :
+          break;
+        case(NodeType::inner_node) :
+          const inner_node* current_inner = static_cast<const inner_node*>(current);
+          int slot = find_lower(current_inner, key);
+          current_pid = current_inner->child_pid[slot];
+          current = mapping_table.get(current_pid);
+          break;
+      }
+    }
+
+    return current_pid;
+  }
 
 public:
   inline void insert_data(const DataPairType &x);
   inline void delete_key(const KeyType &x);
   inline void split_leaf(PID pid);
+  inline bool exists(const KeyType &key);
+  inline std::vector<DataPairType> search(const KeyType &key);
+  inline size_t count(const KeyType &key);
 
 };
 

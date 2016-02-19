@@ -124,6 +124,41 @@ void BWTree<KeyType, ValueType, KeyComparator>::split_leaf(PID pid) {
   set_node(parent_pid, separator_delta);
 }
 
+template <typename KeyType, typename ValueType, class KeyComparator>
+bool BWTree<KeyType, ValueType, KeyComparator>::exists(const KeyType &key) {
+  PID leaf_pid = get_leaf_node_pid(key);
+
+  if(leaf_pid < 0) {
+    return false;
+  }
+
+  const leaf_node* node = static_cast<const leaf_node*>(mapping_table.get(leaf_pid));
+
+  // Traversing delta chain here will be more efficient since we dont have to loop till base for some cases.
+  // But for simplicity, we call get_all_data() and check if the key is in the returned vector.
+  std::vector<DataPairType> node_data = get_all_data(node);
+
+  return vector_contains_key(node_data, key);
+}
+
+template <typename KeyType, typename ValueType, class KeyComparator>
+std::vector<DataPairType> BWTree<KeyType, ValueType, KeyComparator>::search(const KeyType &key) {
+  std::vector<DataPairType> result;
+  PID leaf_pid = get_leaf_node_pid(key);
+
+  if(leaf_pid < 0) {
+    return NULL;
+  }
+
+  const leaf_node* node = static_cast<const leaf_node*>(mapping_table.get(leaf_pid));
+  int slot = find_lower(node, key);
+
+  std::vector<DataPairType> node_data = get_all_data(node);
+
+  return node_data;
+}
+
+
 
 }  // End index namespace
 }  // End peloton namespace
