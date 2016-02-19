@@ -19,7 +19,7 @@
 #include <memory>
 #include <cstddef>
 #include <assert.h>
-#include <unordered_map>
+#include <unordered_set>
 #include <atomic>
 
 #define BWTREE_MAX(a,b) ((a) < (b) ? (b) : (a))
@@ -35,11 +35,13 @@ class BWTree {
 public:
   // *** Constructed Types
 
-  typedef std::pair<KeyType, ValueType> PairType;
+  typedef size_t PID;
+
+  typedef std::pair<KeyType, ValueType> DataPairType;
+  typedef std::pair<KeyType, ValueType> PointerPairType;
 
   typedef std::allocator<std::pair<KeyType, ValueType>> AllocType;
 
-  typedef size_t PID;
 
   enum class NodeType {
     leaf_node,
@@ -73,10 +75,13 @@ private:
     unsigned short level;
     unsigned short slot_use;
 
+    PID parent;
+
     inline void initialize(NodeType n, unsigned short l, unsigned short s) {
       node_type = n;
       level = l;
       slot_use = s;
+      parent = NULL_PID;
     }
 
     inline bool is_leaf() const {
@@ -88,15 +93,19 @@ private:
     }
 
     inline bool is_full() const {
-      return (node::slot_use == leaf_slot_max);
+      return (slot_use == leaf_slot_max);
     }
 
     inline bool is_few() const {
-      return (node::slot_use <= min_leaf_slots);
+      return (slot_use <= min_leaf_slots);
     }
 
     inline bool is_underflow() const {
-      return (node::slot_use < min_leaf_slots);
+      return (slot_use < min_leaf_slots);
+    }
+
+    inline NodeType get_type() const {
+      return node_type;
     }
 
     inline unsigned short get_level() const {
@@ -109,6 +118,14 @@ private:
 
     inline void add_slotuse() {
       slot_use++;
+    }
+
+    inline PID get_parent() const {
+      return parent;
+    }
+
+    inline void set_parent(PID p) {
+      parent = p;
     }
 
   };
@@ -154,11 +171,27 @@ private:
       prev_leaf = next_leaf = NULL_PID;
     }
 
-    inline void set_slot(unsigned short slot, const PairType &pair) {
+    inline void set_slot(unsigned short slot, const DataPairType &pair) {
       if (slot >= node::get_size())
           node::add_slotuse();
       slot_key[slot] = pair.first;
       slot_data[slot] = pair.second;
+    }
+
+    inline PID get_prev() const {
+      return prev_leaf;
+    }
+
+    inline void set_prev(PID pid) {
+      prev_leaf = pid;
+    }
+
+    inline PID get_next() const {
+      return next_leaf;
+    }
+
+    inline void set_next(PID pid) {
+      next_leaf = pid;
     }
 
   };
@@ -199,10 +232,14 @@ private:
     KeyType insert_key;
     ValueType insert_value;
 
-    inline void initialize(const PairType &pair, node *n) {
+    inline void initialize(const DataPairType &pair, node *n) {
       insert_key = pair.first;
       insert_value = pair.second;
       delta_node::initialize(NodeType::insert_node, n->get_size() + 1, n);
+    }
+
+    inline DataPairType get_data() const {
+      return std::make_pair(insert_key, insert_value);
     }
   };
 
@@ -215,6 +252,10 @@ private:
     inline void initialize(const KeyType &key, node *n) {
       delete_key = key;
       delta_node::initialize(NodeType::delete_node, n->get_size() - 1, n);
+    }
+
+    inline KeyType get_key() const {
+      return delete_key;
     }
   };
 
@@ -230,6 +271,10 @@ private:
       split_key = key;
       side = pid;
       delta_node::initialize(NodeType::split_node, s, n);
+    }
+
+    inline KeyType get_key() const {
+      return split_key;
     }
   };
 
@@ -330,6 +375,11 @@ private:
     return KeyComparator(a, b);
   }
 
+  /// True if a < b ? "constructed" from m_key_less()
+  inline bool datapair_less(const DataPairType &a, const DataPairType b) const {
+    return KeyComparator(a.first, b.first);
+  }
+
   /// True if a <= b ? constructed from key_less()
   inline bool key_lessequal(const KeyType &a, const KeyType b) const {
     return !KeyComparator(b, a);
@@ -403,7 +453,7 @@ private:
   }
 
   /// Allocate and initialize an insert delta node
-  inline insert_node *allocate_insert(PairType &pair, node *base) {
+  inline insert_node *allocate_insert(DataPairType &pair, node *base) {
     insert_node *n = new (insert_node_allocator().allocate(1)) insert_node();
     n->initialize(pair, base);
     return n;
@@ -417,16 +467,16 @@ private:
   }
 
   /// Allocate and initialize an split delta node
-  inline split_node *allocate_split(const KeyType &key, PID pid, unsigned short size, node *base) {
+  inline split_node *allocate_split(KeyType &key, PID leaf, unsigned short size, node *base) {
     split_node *n = new (insert_node_allocator().allocate(1)) insert_node();
-    n->initialize(key, pid, size, base);
+    n->initialize(key, leaf, size, base);
     return n;
   }
 
   /// Allocate and initialize an separator delta node
-  inline separator_node *allocate_separator(const KeyType &left_key, const KeyType &right_key, const PID pid, node *base) {
+  inline separator_node *allocate_separator(KeyType &left_key, KeyType &right_key, PID leaf, node *base) {
     split_node *n = new (insert_node_allocator().allocate(1)) insert_node();
-    n->initialize(left_key, right_key, pid, base);
+    n->initialize(left_key, right_key, leaf, base);
     return n;
   }
 
@@ -449,15 +499,66 @@ private:
 
 private:
   template <typename node_type>
-  inline unsigned short find_lower(const node_type *n, const KeyType &key) const{
+  inline unsigned short find_lower(const node_type *n, const KeyType &key) const {
     unsigned short lo = 0;
     while (lo < n->slot_use && key_less(n->slot_key[lo], key)) ++lo;
     return lo;
   }
 
+  inline node *get_base_node(node *n) const {
+    while (n->is_delta()) {
+      n = static_cast<delta_node *>(n)->get_base();
+    }
+    return n;
+  }
+
+  inline std::vector<DataPairType> get_all_data(node *n) const {
+    std::unordered_set<DataPairType> inserted;
+    std::unordered_set<KeyType> deleted;
+    bool has_split = false;
+    KeyType split_key;
+
+    while (n->is_delta()) {
+      switch (n->get_type()) {
+        case NodeType::insert_node:
+          DataPairType data = static_cast<insert_node *>(n)->get_data();
+          if ((!has_split || key_less(data.first, split_key))
+              && deleted.find(data) == deleted.end()) {
+            inserted.insert(data);
+          }
+          break;
+
+        case NodeType::delete_node:
+          KeyType key = static_cast<delete_node *>(n)->get_key();
+          deleted.insert(key);
+          break;
+
+        case NodeType::split_node:
+          if (!has_split) {
+            split_key = static_cast<split_node *>(n)->get_key();
+            has_split = true;
+          }
+          break;
+      }
+      n = static_cast<delta_node *>(n)->get_base();
+    }
+
+    std::vector<DataPairType> result;
+    for (const auto &data: inserted) {
+      result.push_back(data);
+    }
+    for (unsigned short slot = 0; slot < n->get_size(); slot++) {
+      result.push_back(std::make_pair(n->slot_key[slot], n->slot_data[slot]));
+    }
+    std::sort(result.begin(), result.end(), datapair_less);
+    return result;
+}
+
+
 public:
-  inline void insert_data(const PairType &x);
+  inline void insert_data(const DataPairType &x);
   inline void delete_key(const KeyType &x);
+  inline void split_leaf(PID pid);
 
 };
 
