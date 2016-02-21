@@ -317,10 +317,10 @@ private:
 
   struct mapping_table {
 
-    node** table;
+    node** table = new node*[MAPPING_TABLE_SIZE]();
 
     inline void initialize() {
-      table = new node*[MAPPING_TABLE_SIZE];
+      std::fill_n(table, MAPPING_TABLE_SIZE, 0);
     }
 
     // Atomically update the value using CAS
@@ -330,6 +330,7 @@ private:
           break;  // Update success
         }
       }
+//      table[key] = value;
     }
 
     // Mark as null if remove is called
@@ -339,6 +340,7 @@ private:
           break;  // Update success
         }
       }
+//      table[key] = 0;
     }
 
     // Get physical pointer from PID
@@ -382,7 +384,8 @@ public:
   /// comparison function
   explicit inline BWTree(const KeyComparator &kcf,
                          const AllocType &alloc = AllocType())
-      : m_root(NULL_PID), m_headleaf(NULL_PID), m_tailleaf(NULL_PID), m_allocator(alloc), m_comparator(kcf) {
+      : m_root(NULL_PID), m_headleaf(NULL_PID), m_tailleaf(NULL_PID), m_allocator(alloc), m_comparator(kcf), pid_counter(0) {
+    mapping_table.initialize();
   }
 
 
@@ -611,6 +614,11 @@ private:
     for (unsigned short slot = 0; slot < n->get_size(); slot++) {
       result.push_back(std::make_pair(static_cast<leaf_node *>(n)->slot_key[slot], static_cast<leaf_node *>(n)->slot_data[slot]));
     }
+
+    if(result.size() == 0) {
+      return result;
+    }
+
     // std::sort(result.begin(), result.end(), data_comparator);
     for (int i = 0; i < result.size() - 1; i++)
       for (int j = i + 1; j < result.size(); j++) {

@@ -21,6 +21,7 @@ namespace index {
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
 void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::insert_data(__attribute__((unused)) const DataPairType &x) {
+  LOG_INFO("insert is called");
 
   if (m_root == NULL_PID) {
     m_root = m_headleaf = m_tailleaf = allocate_leaf();
@@ -48,6 +49,8 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::insert_data(
   if (insert_delta->is_full()) {
     split_leaf(curr_pid);
   }
+  LOG_INFO("insert is done");
+
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
@@ -82,6 +85,7 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::update_data(
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
 void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::delete_key(const KeyType &x) {
+  LOG_INFO("delete is called");
 
   if (m_root == NULL_PID) {
     m_root = m_headleaf = m_tailleaf = allocate_leaf();
@@ -104,6 +108,8 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::delete_key(c
   delete_node *delete_delta = allocate_delete(x, curr_node);
   delete_delta->set_base(curr_node);
   set_node(curr_pid, delete_delta);
+  LOG_INFO("delete is done");
+
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
@@ -181,7 +187,7 @@ template <typename KeyType, typename ValueType, typename KeyComparator, typename
 std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::search(const KeyType &key) {
   std::vector<DataPairType> result;
   PID leaf_pid = get_leaf_node_pid(key);
-
+  LOG_INFO("search is called");
   if(leaf_pid < 0) {
     return result;
   }
@@ -189,18 +195,21 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
   // Find the leaf node and retrieve all records in the node
   node* leaf = mapping_table.get(leaf_pid);
   auto node_data = get_all_data(leaf);
+  LOG_INFO("get_all_data is done");
 
   // Check if we have a match (possible improvement: implement binary search)
   for (auto it = node_data.begin() ; it != node_data.end(); ++it) {
     // For duplicate keys, there's an edge case that some records can be placed at the
     // next node so we need to check the next page as well.
-    if(it != node_data.end() && (next(it) == node_data.end()) && key_equal(key, it->first)) {
-      // TODO: handle duplicate keys
-    }
-    else if(key_equal(key, it->first)) {
+//    if(it != node_data.end() && (next(it) == node_data.end()) && key_equal(key, it->first)) {
+//      // TODO: handle duplicate keys
+//    }
+    if(key_equal(key, it->first)) {
+      LOG_INFO("key match found");
       result.push_back(*it);
     }
   }
+  LOG_INFO("search is done");
   return result;
 }
 
