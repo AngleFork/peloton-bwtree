@@ -10,8 +10,6 @@
 //
 //===----------------------------------------------------------------------===//
 
-#include <unordered_set>
-#include <vector>
 
 #include "backend/index/bwtree.h"
 #include "backend/common/types.h"
@@ -29,17 +27,16 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::insert_data(
   }
 
   KeyType key = x.first;
-  ValueType value = x.second;
 
   PID curr_pid = m_root;
   node *curr_node = get_node(m_root);
 
   while (!curr_node->is_leaf()) {
     while (curr_node->is_delta()) {
-      curr_node = curr_node->get_node();
+      curr_node = static_cast<delta_node *>(curr_node)->get_base();
     }
-    unsigned short slot = find_lower(curr_node, key);
-    curr_pid = curr_node->child_pid[slot];
+    unsigned short slot = find_lower(static_cast<inner_node *>(curr_node), key);
+    curr_pid = static_cast<inner_node *>(curr_node)->child_pid[slot];
     curr_node = get_node(curr_pid);
   }
 
@@ -61,17 +58,16 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::update_data(
   }
 
   KeyType key = x.first;
-  ValueType value = x.second;
 
   PID curr_pid = m_root;
   node *curr_node = get_node(m_root);
 
   while (!curr_node->is_leaf()) {
     while (curr_node->is_delta()) {
-      curr_node = curr_node->get_node();
+      curr_node = static_cast<delta_node *>(curr_node)->get_base();
     }
-    unsigned short slot = find_lower(curr_node, key);
-    curr_pid = curr_node->child_pid[slot];
+    unsigned short slot = find_lower(static_cast<inner_node *>(curr_node), key);
+    curr_pid = static_cast<inner_node *>(curr_node)->child_pid[slot];
     curr_node = get_node(curr_pid);
   }
 
@@ -96,16 +92,16 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::delete_key(c
 
   while (!curr_node->is_leaf()) {
     while (curr_node->is_delta()) {
-      curr_node = curr_node->get_node();
+      curr_node = static_cast<delta_node *>(curr_node)->get_base();
     }
-    unsigned short slot = find_lower(curr_node, x);
-    curr_pid = curr_node->child_pid[slot];
+    unsigned short slot = find_lower(static_cast<inner_node *>(curr_node), x);
+    curr_pid = static_cast<inner_node *>(curr_node)->child_pid[slot];
     curr_node = get_node(curr_pid);
   }
   
   // check whether the leaf node contains the key, need api
 
-  delete_node *delete_delta = allocate_delete(x, curr_node, curr_pid);
+  delete_node *delete_delta = allocate_delete(x, curr_node);
   delete_delta->set_base(curr_node);
   set_node(curr_pid, delete_delta);
 }
@@ -114,15 +110,16 @@ template <typename KeyType, typename ValueType, typename KeyComparator, typename
 void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::split_leaf(PID pid) {
 
   node *n = get_node(pid);
-  node *base_node = get_base_node(n);
+  leaf_node *base_node = static_cast<leaf_node *>(get_base_node(n));
 
   PID former_next_leaf_pid = static_cast<leaf_node *>(base_node)->get_next();
-  node *former_next_leaf = get_node(former_next_leaf_pid);
+  leaf_node *former_next_leaf = static_cast<leaf_node *>(get_node(former_next_leaf_pid));
 
   std::vector<DataPairType> buffer = get_all_data(n);
 
   // split delta node
-  KeyType split_key = buffer[buffer.size() / 2];
+  unsigned short pos = static_cast<unsigned short>(buffer.size()) / 2;
+  KeyType split_key = buffer[pos].first;
 
   PID next_leaf_pid = allocate_leaf();
   leaf_node *next_leaf = static_cast<leaf_node *>(get_node(next_leaf_pid));
@@ -133,7 +130,7 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::split_leaf(P
   next_leaf->set_next(former_next_leaf_pid);
   next_leaf->set_prev(pid);
 
-  n->set_next(next_leaf_pid);
+  base_node->set_next(next_leaf_pid);
   former_next_leaf->set_prev(next_leaf_pid);
 
   split_node *split_delta = allocate_split(split_key, next_leaf_pid, buffer.size() - buffer.size() / 2, n);
@@ -151,7 +148,7 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::split_leaf(P
 
   PID parent_pid = base_node->get_parent();
   node *parent = get_node(parent_pid);
-  node *parent_base_node = static_cast<inner_node *>(get_base_node(parent));
+  inner_node *parent_base_node = static_cast<inner_node *>(get_base_node(parent));
   unsigned short slot = find_lower(parent_base_node, split_key);
   KeyType right_key;
   if (slot >= parent_base_node->get_size())
@@ -171,11 +168,11 @@ bool BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::exists(const
     return false;
   }
 
-  const leaf_node* node = static_cast<const leaf_node*>(mapping_table.get(leaf_pid));
+  node* leaf = mapping_table.get(leaf_pid);
 
   // Traversing delta chain here will be more efficient since we dont have to loop till base for some cases.
   // But for simplicity, we call get_all_data() and check if the key is in the returned vector.
-  std::vector<DataPairType> node_data = get_all_data(node);
+  std::vector<DataPairType> node_data = get_all_data(leaf);
 
   return vector_contains_key(node_data, key);
 }
@@ -186,12 +183,12 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
   PID leaf_pid = get_leaf_node_pid(key);
 
   if(leaf_pid < 0) {
-    return NULL;
+    return result;
   }
 
   // Find the leaf node and retrieve all records in the node
-  const leaf_node* node = static_cast<const leaf_node*>(mapping_table.get(leaf_pid));
-  auto node_data = get_all_data(node);
+  node* leaf = mapping_table.get(leaf_pid);
+  auto node_data = get_all_data(leaf);
 
   // Check if we have a match (possible improvement: implement binary search)
   for (auto it = node_data.begin() ; it != node_data.end(); ++it) {
@@ -201,7 +198,7 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
       // TODO: handle duplicate keys
     }
     else if(key_equal(key, it->first)) {
-      result.push_back(static_cast<const DataPairType>(it));
+      result.push_back(*it);
     }
   }
   return result;
@@ -214,7 +211,7 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
   PID high_pid = get_leaf_node_pid(high);
 
   if(low_pid < 0 || high_pid < 0) {
-    return NULL;
+    return result;
   }
 
   // Case 1. low not exists  (e.g where x < 5)
@@ -222,9 +219,10 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
   // Case 2. high not exists (e.g where x > 5)
 
   // Case 3. low & high both exist (e.g where x > 5 and x < 10)
-  const leaf_node* low_node = static_cast<const leaf_node*>(mapping_table.get(low_pid));
-  const leaf_node* high_node = static_cast<const leaf_node*>(mapping_table.get(high_pid));
-  PID current_pid = low_pid;
+
+  // const leaf_node* low_node = static_cast<const leaf_node*>(mapping_table.get(low_pid));
+  // const leaf_node* high_node = static_cast<const leaf_node*>(mapping_table.get(high_pid));
+  // PID current_pid = low_pid;
 
   return result;
 
@@ -232,40 +230,40 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
 
 template class BWTree<IntsKey<1>, ItemPointer, IntsComparator<1>,
         IntsEqualityChecker<1>>;
-//template class BWTree<IntsKey<2>, ItemPointer, IntsComparator<2>,
-//        IntsEqualityChecker<2>>;
-//template class BWTree<IntsKey<3>, ItemPointer, IntsComparator<3>,
-//        IntsEqualityChecker<3>>;
-//template class BWTree<IntsKey<4>, ItemPointer, IntsComparator<4>,
-//        IntsEqualityChecker<4>>;
-//
-//template class BWTree<GenericKey<4>, ItemPointer, GenericComparator<4>,
-//        GenericEqualityChecker<4>>;
-//template class BWTree<GenericKey<8>, ItemPointer, GenericComparator<8>,
-//        GenericEqualityChecker<8>>;
-//template class BWTree<GenericKey<12>, ItemPointer, GenericComparator<12>,
-//        GenericEqualityChecker<12>>;
-//template class BWTree<GenericKey<16>, ItemPointer, GenericComparator<16>,
-//        GenericEqualityChecker<16>>;
-//template class BWTree<GenericKey<24>, ItemPointer, GenericComparator<24>,
-//        GenericEqualityChecker<24>>;
-//template class BWTree<GenericKey<32>, ItemPointer, GenericComparator<32>,
-//        GenericEqualityChecker<32>>;
-//template class BWTree<GenericKey<48>, ItemPointer, GenericComparator<48>,
-//        GenericEqualityChecker<48>>;
-//template class BWTree<GenericKey<64>, ItemPointer, GenericComparator<64>,
-//        GenericEqualityChecker<64>>;
-//template class BWTree<GenericKey<96>, ItemPointer, GenericComparator<96>,
-//        GenericEqualityChecker<96>>;
-//template class BWTree<GenericKey<128>, ItemPointer, GenericComparator<128>,
-//        GenericEqualityChecker<128>>;
-//template class BWTree<GenericKey<256>, ItemPointer, GenericComparator<256>,
-//        GenericEqualityChecker<256>>;
-//template class BWTree<GenericKey<512>, ItemPointer, GenericComparator<512>,
-//        GenericEqualityChecker<512>>;
-//
-//template class BWTree<TupleKey, ItemPointer, TupleKeyComparator,
-//        TupleKeyEqualityChecker>;
+template class BWTree<IntsKey<2>, ItemPointer, IntsComparator<2>,
+       IntsEqualityChecker<2>>;
+template class BWTree<IntsKey<3>, ItemPointer, IntsComparator<3>,
+       IntsEqualityChecker<3>>;
+template class BWTree<IntsKey<4>, ItemPointer, IntsComparator<4>,
+       IntsEqualityChecker<4>>;
+
+template class BWTree<GenericKey<4>, ItemPointer, GenericComparator<4>,
+       GenericEqualityChecker<4>>;
+template class BWTree<GenericKey<8>, ItemPointer, GenericComparator<8>,
+       GenericEqualityChecker<8>>;
+template class BWTree<GenericKey<12>, ItemPointer, GenericComparator<12>,
+       GenericEqualityChecker<12>>;
+template class BWTree<GenericKey<16>, ItemPointer, GenericComparator<16>,
+       GenericEqualityChecker<16>>;
+template class BWTree<GenericKey<24>, ItemPointer, GenericComparator<24>,
+       GenericEqualityChecker<24>>;
+template class BWTree<GenericKey<32>, ItemPointer, GenericComparator<32>,
+       GenericEqualityChecker<32>>;
+template class BWTree<GenericKey<48>, ItemPointer, GenericComparator<48>,
+       GenericEqualityChecker<48>>;
+template class BWTree<GenericKey<64>, ItemPointer, GenericComparator<64>,
+       GenericEqualityChecker<64>>;
+template class BWTree<GenericKey<96>, ItemPointer, GenericComparator<96>,
+       GenericEqualityChecker<96>>;
+template class BWTree<GenericKey<128>, ItemPointer, GenericComparator<128>,
+       GenericEqualityChecker<128>>;
+template class BWTree<GenericKey<256>, ItemPointer, GenericComparator<256>,
+       GenericEqualityChecker<256>>;
+template class BWTree<GenericKey<512>, ItemPointer, GenericComparator<512>,
+       GenericEqualityChecker<512>>;
+
+template class BWTree<TupleKey, ItemPointer, TupleKeyComparator,
+       TupleKeyEqualityChecker>;
 
 }  // End index namespace
 }  // End peloton namespace

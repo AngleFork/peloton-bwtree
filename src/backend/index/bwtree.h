@@ -19,8 +19,7 @@
 #include <memory>
 #include <cstddef>
 #include <assert.h>
-#include <unordered_set>
-#include <unordered_map>
+#include <vector>
 #include <atomic>
 
 #define BWTREE_MAX(a,b) ((a) < (b) ? (b) : (a))
@@ -30,7 +29,7 @@
 namespace peloton {
 namespace index {
 
-template <typename KeyType, typename ValueType, class KeyComparator, class KeyEqualityChecker>
+template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
 class BWTree {
 
 public:
@@ -272,7 +271,7 @@ private:
     inline void initialize(const DataPairType &pair, node *n) {
       update_key = pair.first;
       update_value = pair.second;
-      update_node::initialize(NodeType::update_node, n->get_size(), n);
+      delta_node::initialize(NodeType::update_node, n->get_size(), n);
     }
 
     inline DataPairType get_data() const {
@@ -371,6 +370,9 @@ private:
   /// Mapping table
   mapping_table mapping_table;
 
+  /// Key comparator
+  KeyComparator m_comparator;
+
   /// Atomic counter for PID allocation
   std::atomic<int> pid_counter;
 
@@ -378,8 +380,9 @@ public:
 
   /// Default constructor initializing an empty BW tree with the standard key
   /// comparison function
-  explicit inline BWTree(const AllocType &alloc = AllocType())
-      : m_root(NULL_PID), m_headleaf(NULL_PID), m_tailleaf(NULL_PID), m_allocator(alloc) {
+  explicit inline BWTree(const KeyComparator &kcf,
+                         const AllocType &alloc = AllocType())
+      : m_root(NULL_PID), m_headleaf(NULL_PID), m_tailleaf(NULL_PID), m_allocator(alloc), m_comparator(kcf) {
   }
 
 
@@ -391,35 +394,43 @@ public:
 private:
   // *** Convenient Key Comparison Functions Generated From key_less
 
+
   /// True if a < b ? "constructed" from m_key_less()
-  inline bool key_less(const KeyType &a, const KeyType b) const {
-    return KeyComparator(a, b);
+  inline bool key_less(const KeyType &a, const KeyType &b) const {
+    return m_comparator(a, b);
   }
 
   /// True if a < b ? "constructed" from m_key_less()
-  inline bool datapair_less(const DataPairType &a, const DataPairType b) const {
-    return KeyComparator(a.first, b.first);
+  inline bool datapair_less(const DataPairType &a, const DataPairType &b) const {
+    return m_comparator(a.first, b.first);
   }
+
+  // struct {
+  //   KeyComparator cmp;
+  //   bool operator()(const DataPairType &a, const DataPairType &b) {   
+  //     return cmp(a.first, b.first);
+  //   }   
+  // } data_comparator;
 
   /// True if a <= b ? constructed from key_less()
-  inline bool key_lessequal(const KeyType &a, const KeyType b) const {
-    return !KeyComparator(b, a);
+  inline bool key_lessequal(const KeyType &a, const KeyType &b) const {
+    return !m_comparator(b, a);
   }
 
   /// True if a > b ? constructed from key_less()
   inline bool key_greater(const KeyType &a, const KeyType &b) const {
-    return KeyComparator(b, a);
+    return m_comparator(b, a);
   }
 
   /// True if a >= b ? constructed from key_less()
-  inline bool key_greaterequal(const KeyType &a, const KeyType b) const {
-    return !KeyComparator(a, b);
+  inline bool key_greaterequal(const KeyType &a, const KeyType &b) const {
+    return !m_comparator(a, b);
   }
 
   /// True if a == b ? constructed from key_less(). This requires the <
   /// relation to be a total order, otherwise the B+ tree cannot be sorted.
   inline bool key_equal(const KeyType &a, const KeyType &b) const {
-    return !KeyComparator(a, b) && !KeyComparator(b, a);
+    return !m_comparator(a, b) && !m_comparator(b, a);
   }
 
 
@@ -479,21 +490,21 @@ private:
   }
 
   /// Allocate and initialize an insert delta node
-  inline insert_node *allocate_insert(DataPairType &pair, node *base) {
+  inline insert_node *allocate_insert(const DataPairType &pair, node *base) {
     insert_node *n = new (insert_node_allocator().allocate(1)) insert_node();
     n->initialize(pair, base);
     return n;
   }
 
   /// Allocate and initialize an delete delta node
-  inline delete_node *allocate_delete(KeyType &key, node *base) {
+  inline delete_node *allocate_delete(const KeyType &key, node *base) {
     delete_node *n = new (delete_node_allocator().allocate(1)) delete_node();
     n->initialize(key, base);
     return n;
   }
 
   /// Allocate and initialize an insert delta node
-  inline update_node *allocate_update(DataPairType &pair, node *base) {
+  inline update_node *allocate_update(const DataPairType &pair, node *base) {
     update_node *n = new (update_node_allocator().allocate(1)) update_node();
     n->initialize(pair, base);
     return n;
@@ -501,14 +512,14 @@ private:
 
   /// Allocate and initialize an split delta node
   inline split_node *allocate_split(KeyType &key, PID leaf, unsigned short size, node *base) {
-    split_node *n = new (insert_node_allocator().allocate(1)) insert_node();
+    split_node *n = new (split_node_allocator().allocate(1)) split_node();
     n->initialize(key, leaf, size, base);
     return n;
   }
 
   /// Allocate and initialize an separator delta node
   inline separator_node *allocate_separator(KeyType &left_key, KeyType &right_key, PID leaf, node *base) {
-    split_node *n = new (insert_node_allocator().allocate(1)) insert_node();
+    separator_node *n = new (separator_node_allocator().allocate(1)) separator_node();
     n->initialize(left_key, right_key, leaf, base);
     return n;
   }
@@ -531,8 +542,7 @@ private:
   }
 
 private:
-  template <typename node_type>
-  inline unsigned short find_lower(const node_type *n, const KeyType &key) const {
+  inline unsigned short find_lower(const inner_node *n, const KeyType &key) const {
     unsigned short lo = 0;
     while (lo < n->slot_use && key_less(n->slot_key[lo], key)) ++lo;
     return lo;
@@ -546,8 +556,8 @@ private:
   }
 
   inline std::vector<DataPairType> get_all_data(node *n) const {
-    std::unordered_map<KeyType, ValueType> inserted;
-    std::unordered_set<KeyType> deleted;
+    std::vector<DataPairType> inserted;
+    std::vector<KeyType> deleted;
     bool has_split = false;
     KeyType split_key;
 
@@ -559,23 +569,22 @@ private:
         case NodeType::insert_node:
           data = static_cast<insert_node *>(n)->get_data();
           if ((!has_split || key_less(data.first, split_key))
-              && deleted.find(data.first) == deleted.end()
-              && inserted.find(data.first) == inserted.end()) {
-            inserted[data.first] = data.second;
+              && !key_vector_contains_key(deleted, data.first)) {
+            inserted.push_back(data);
           }
           break;
 
         case NodeType::delete_node:
           key = static_cast<delete_node *>(n)->get_key();
-          deleted.insert(key);
+          deleted.push_back(key);
           break;
 
         case NodeType::update_node:
           data = static_cast<update_node *>(n)->get_data();
           if ((!has_split || key_less(data.first, split_key))
-              && deleted.find(data.first) == deleted.end()
-              && inserted.find(data.first) == inserted.end()) {
-            inserted[data.first] = data.second;
+              && key_vector_contains_key(deleted, data.first)
+              && vector_contains_key(inserted, data.first)) {
+            inserted.push_back(data);
           }
           break;
 
@@ -585,25 +594,49 @@ private:
             has_split = true;
           }
           break;
+        case NodeType::leaf_node:
+          break;
+        case NodeType::inner_node:
+          break;
+        case NodeType::separator_node:
+          break;
       }
       n = static_cast<delta_node *>(n)->get_base();
     }
 
     std::vector<DataPairType> result;
-    for (auto iter = inserted.begin(); iter != inserted.end(); iter++)
-      result.push_back(std::make_pair(iter->first, iter->second));
+    for (int i = 0; i < inserted.size(); i++)
+      result.push_back(inserted[i]);
 
     for (unsigned short slot = 0; slot < n->get_size(); slot++) {
-      result.push_back(std::make_pair(n->slot_key[slot], n->slot_data[slot]));
+      result.push_back(std::make_pair(static_cast<leaf_node *>(n)->slot_key[slot], static_cast<leaf_node *>(n)->slot_data[slot]));
     }
-    std::sort(result.begin(), result.end(), datapair_less);
+    // std::sort(result.begin(), result.end(), data_comparator);
+    for (int i = 0; i < result.size() - 1; i++)
+      for (int j = i + 1; j < result.size(); j++) {
+        if (key_greater(result[i].first, result[j].first)) {
+          DataPairType tmp = result[i];
+          result[i] = result[j];
+          result[j] = tmp;
+        }
+      }
     return result;
   }
 
   // Helper function for checking if the key is in the vector.
-  inline bool vector_contains_key(std::vector<DataPairType> data, const KeyType &key) {
+  inline bool vector_contains_key(std::vector<DataPairType> data, const KeyType &key) const {
     for (auto it = data.begin() ; it != data.end(); ++it) {
       if(key_equal(key, it->first)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Helper function for checking if the key is in the vector.
+  inline bool key_vector_contains_key(std::vector<KeyType> keys, KeyType &key) const {
+    for (auto it = keys.begin() ; it != keys.end(); ++it) {
+      if(key_equal(key, *it)) {
         return true;
       }
     }
@@ -623,12 +656,22 @@ private:
       NodeType current_type = current->get_type();
       // We need to take care of delta nodes from split/merge and regular inner node
       switch(current_type) {
-        case(NodeType::separator_node) :
+
+        case NodeType::insert_node:
           break;
-        case(NodeType::split_node) :
+        case NodeType::delete_node:
           break;
-        case(NodeType::inner_node) :
-          const inner_node* current_inner = static_cast<const inner_node*>(current);
+        case NodeType::update_node:
+          break;
+        case NodeType::split_node:
+          break;
+        case NodeType::separator_node :
+          break;
+
+        case NodeType::leaf_node:
+          break;
+        case NodeType::inner_node :
+          const inner_node* current_inner = static_cast<const inner_node *>(current);
           int slot = find_lower(current_inner, key);
           current_pid = current_inner->child_pid[slot];
           current = mapping_table.get(current_pid);
