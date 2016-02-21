@@ -29,7 +29,7 @@
 namespace peloton {
 namespace index {
 
-template <typename KeyType, typename ValueType, class KeyComparator>
+template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
 class BWTree {
 
 public:
@@ -594,13 +594,13 @@ private:
   }
 
 public:
-  inline void insert_data(const DataPairType &x);
-  inline void delete_key(const KeyType &x);
-  inline void split_leaf(PID pid);
-  inline bool exists(const KeyType &key);
-  inline std::vector<DataPairType> search(const KeyType &key);
-  inline std::vector<DataPairType> search_range(const KeyType &low_key, const KeyType &high_key);
-  inline size_t count(const KeyType &key);
+  void insert_data(const DataPairType &x);
+  void delete_key(const KeyType &x);
+  void split_leaf(PID pid);
+  bool exists(const KeyType &key);
+  std::vector<std::pair<KeyType, ValueType>> search(const KeyType &key);
+  std::vector<std::pair<KeyType, ValueType>> search_range(const KeyType &low_key, const KeyType &high_key);
+  size_t count(const KeyType &key);
 
 };
 

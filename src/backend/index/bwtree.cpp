@@ -18,8 +18,8 @@
 namespace peloton {
 namespace index {
 
-template <typename KeyType, typename ValueType, class KeyComparator>
-void BWTree<KeyType, ValueType, KeyComparator>::insert_data(const DataPairType &x) {
+template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
+void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::insert_data(const DataPairType &x) {
 
   if (m_root == NULL_PID) {
     m_root = m_headleaf = m_tailleaf = allocate_leaf();
@@ -48,8 +48,8 @@ void BWTree<KeyType, ValueType, KeyComparator>::insert_data(const DataPairType &
   }
 }
 
-template <typename KeyType, typename ValueType, class KeyComparator>
-void BWTree<KeyType, ValueType, KeyComparator>::delete_key(const KeyType &x) {
+template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
+void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::delete_key(const KeyType &x) {
 
   if (m_root == NULL_PID) {
     m_root = m_headleaf = m_tailleaf = allocate_leaf();
@@ -72,8 +72,8 @@ void BWTree<KeyType, ValueType, KeyComparator>::delete_key(const KeyType &x) {
   set_node(curr_pid, delete_delta);
 }
 
-template <typename KeyType, typename ValueType, class KeyComparator>
-void BWTree<KeyType, ValueType, KeyComparator>::split_leaf(PID pid) {
+template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
+void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::split_leaf(PID pid) {
 
   node *n = get_node(pid);
   node *base_node = get_base_node(n);
@@ -125,8 +125,8 @@ void BWTree<KeyType, ValueType, KeyComparator>::split_leaf(PID pid) {
   set_node(parent_pid, separator_delta);
 }
 
-template <typename KeyType, typename ValueType, class KeyComparator>
-bool BWTree<KeyType, ValueType, KeyComparator>::exists(const KeyType &key) {
+template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
+bool BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::exists(const KeyType &key) {
   PID leaf_pid = get_leaf_node_pid(key);
 
   if(leaf_pid < 0) {
@@ -142,8 +142,8 @@ bool BWTree<KeyType, ValueType, KeyComparator>::exists(const KeyType &key) {
   return vector_contains_key(node_data, key);
 }
 
-template <typename KeyType, typename ValueType, class KeyComparator>
-std::vector<DataPairType> BWTree<KeyType, ValueType, KeyComparator>::search(const KeyType &key) {
+template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
+std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::search(const KeyType &key) {
   std::vector<DataPairType> result;
   PID leaf_pid = get_leaf_node_pid(key);
 
@@ -153,10 +153,10 @@ std::vector<DataPairType> BWTree<KeyType, ValueType, KeyComparator>::search(cons
 
   // Find the leaf node and retrieve all records in the node
   const leaf_node* node = static_cast<const leaf_node*>(mapping_table.get(leaf_pid));
-  std::vector<DataPairType> node_data = get_all_data(node);
+  auto node_data = get_all_data(node);
 
   // Check if we have a match (possible improvement: implement binary search)
-  for (std::vector<DataPairType>::iterator it = node_data.begin() ; it != node_data.end(); ++it) {
+  for (auto it = node_data.begin() ; it != node_data.end(); ++it) {
     // For duplicate keys, there's an edge case that some records can be placed at the
     // next node so we need to check the next page as well.
     if(it != node_data.end() && (next(it) == node_data.end()) && key_equal(key, it->first)) {
@@ -169,8 +169,8 @@ std::vector<DataPairType> BWTree<KeyType, ValueType, KeyComparator>::search(cons
   return result;
 }
 
-template <typename KeyType, typename ValueType, class KeyComparator>
-std::vector<DataPairType> BWTree<KeyType, ValueType, KeyComparator>::search_range(const KeyType &low, const KeyType &high) {
+template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
+std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::search_range(const KeyType &low, const KeyType &high) {
   std::vector<DataPairType> result;
   PID low_pid = get_leaf_node_pid(low);
   PID high_pid = get_leaf_node_pid(high);
@@ -187,7 +187,6 @@ std::vector<DataPairType> BWTree<KeyType, ValueType, KeyComparator>::search_rang
   const leaf_node* low_node = static_cast<const leaf_node*>(mapping_table.get(low_pid));
   const leaf_node* high_node = static_cast<const leaf_node*>(mapping_table.get(high_pid));
   PID current_pid = low_pid;
-  
 
 
 }
