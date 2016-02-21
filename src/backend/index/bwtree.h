@@ -20,6 +20,7 @@
 #include <cstddef>
 #include <assert.h>
 #include <unordered_set>
+#include <unordered_map>
 #include <atomic>
 
 #define BWTREE_MAX(a,b) ((a) < (b) ? (b) : (a))
@@ -48,6 +49,7 @@ public:
     inner_node,
     insert_node,
     delete_node,
+    update_node,
     split_node,
     separator_node
   };
@@ -259,6 +261,25 @@ private:
     }
   };
 
+  /// Extended structure of a update node in memory. Contains a key, value
+  /// pair to update
+  struct update_node : public delta_node {
+    typedef typename AllocType::template rebind<update_node>::other alloc_type;
+
+    KeyType update_key;
+    ValueType update_value;
+
+    inline void initialize(const DataPairType &pair, node *n) {
+      update_key = pair.first;
+      update_value = pair.second;
+      update_node::initialize(NodeType::update_node, n->get_size(), n);
+    }
+
+    inline DataPairType get_data() const {
+      return std::make_pair(update_key, update_value);
+    }
+  };
+
   /// Extended structure of a delta node in memory. Contains a split key
   /// and a logical side pointer.
   struct split_node : public delta_node {
@@ -424,6 +445,11 @@ private:
     return typename delete_node::alloc_type(m_allocator);
   }
 
+  /// Return an allocator for update_node objects
+  typename update_node::alloc_type update_node_allocator() {
+    return typename update_node::alloc_type(m_allocator);
+  }
+
   /// Return an allocator for split_node objects
   typename split_node::alloc_type split_node_allocator() {
     return typename split_node::alloc_type(m_allocator);
@@ -463,6 +489,13 @@ private:
   inline delete_node *allocate_delete(KeyType &key, node *base) {
     delete_node *n = new (delete_node_allocator().allocate(1)) delete_node();
     n->initialize(key, base);
+    return n;
+  }
+
+  /// Allocate and initialize an insert delta node
+  inline update_node *allocate_update(DataPairType &pair, node *base) {
+    update_node *n = new (update_node_allocator().allocate(1)) update_node();
+    n->initialize(pair, base);
     return n;
   }
 
@@ -513,24 +546,37 @@ private:
   }
 
   inline std::vector<DataPairType> get_all_data(node *n) const {
-    std::unordered_set<DataPairType> inserted;
+    std::unordered_map<KeyType, ValueType> inserted;
     std::unordered_set<KeyType> deleted;
     bool has_split = false;
     KeyType split_key;
 
+    DataPairType data;
+    KeyType key;
+
     while (n->is_delta()) {
       switch (n->get_type()) {
         case NodeType::insert_node:
-          DataPairType data = static_cast<insert_node *>(n)->get_data();
+          data = static_cast<insert_node *>(n)->get_data();
           if ((!has_split || key_less(data.first, split_key))
-              && deleted.find(data) == deleted.end()) {
-            inserted.insert(data);
+              && deleted.find(data.first) == deleted.end()
+              && inserted.find(data.first) == inserted.end()) {
+            inserted[data.first] = data.second;
           }
           break;
 
         case NodeType::delete_node:
-          KeyType key = static_cast<delete_node *>(n)->get_key();
+          key = static_cast<delete_node *>(n)->get_key();
           deleted.insert(key);
+          break;
+
+        case NodeType::update_node:
+          data = static_cast<update_node *>(n)->get_data();
+          if ((!has_split || key_less(data.first, split_key))
+              && deleted.find(data.first) == deleted.end()
+              && inserted.find(data.first) == inserted.end()) {
+            inserted[data.first] = data.second;
+          }
           break;
 
         case NodeType::split_node:
@@ -544,9 +590,9 @@ private:
     }
 
     std::vector<DataPairType> result;
-    for (const auto &data: inserted) {
-      result.push_back(data);
-    }
+    for (auto iter = inserted.begin(); iter != inserted.end(); iter++)
+      result.push_back(std::make_pair(iter->first, iter->second));
+
     for (unsigned short slot = 0; slot < n->get_size(); slot++) {
       result.push_back(std::make_pair(n->slot_key[slot], n->slot_data[slot]));
     }
@@ -596,6 +642,7 @@ private:
 public:
   void insert_data(const DataPairType &x);
   void delete_key(const KeyType &x);
+  void update_data(const DataPairType &x);
   void split_leaf(PID pid);
   bool exists(const KeyType &key);
   std::vector<std::pair<KeyType, ValueType>> search(const KeyType &key);

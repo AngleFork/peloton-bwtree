@@ -43,12 +43,45 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::insert_data(
     curr_node = get_node(curr_pid);
   }
 
+  // check whether the leaf node contains the key, need api
+
   insert_node *insert_delta = allocate_insert(x, curr_node);
   insert_delta->set_base(curr_node);
   set_node(curr_pid, insert_delta);
   if (insert_delta->is_full()) {
     split_leaf(curr_pid);
   }
+}
+
+template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
+void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::update_data(const DataPairType &x) {
+
+  if (m_root == NULL_PID) {
+    m_root = m_headleaf = m_tailleaf = allocate_leaf();
+  }
+
+  KeyType key = x.first;
+  ValueType value = x.second;
+
+  PID curr_pid = m_root;
+  node *curr_node = get_node(m_root);
+
+  while (!curr_node->is_leaf()) {
+    while (curr_node->is_delta()) {
+      curr_node = curr_node->get_node();
+    }
+    unsigned short slot = find_lower(curr_node, key);
+    curr_pid = curr_node->child_pid[slot];
+    curr_node = get_node(curr_pid);
+  }
+
+  // check whether the leaf node contains the key, need api
+
+
+  update_node *update_delta = allocate_update(x, curr_node);
+  update_delta->set_base(curr_node);
+  set_node(curr_pid, update_delta);
+
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
@@ -69,6 +102,8 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::delete_key(c
     curr_pid = curr_node->child_pid[slot];
     curr_node = get_node(curr_pid);
   }
+  
+  // check whether the leaf node contains the key, need api
 
   delete_node *delete_delta = allocate_delete(x, curr_node, curr_pid);
   delete_delta->set_base(curr_node);
