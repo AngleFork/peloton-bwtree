@@ -29,7 +29,7 @@
 namespace peloton {
 namespace index {
 
-template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
+template <typename KeyType, typename ValueType, class KeyComparator, class KeyEqualityChecker>
 class BWTree {
 
 public:

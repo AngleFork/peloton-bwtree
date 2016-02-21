@@ -54,7 +54,6 @@ bool BWTreeIndex<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteE
   // TODO: add the code for checking values
 
   container.delete_key(index_key);
-
   return false;
 }
 
