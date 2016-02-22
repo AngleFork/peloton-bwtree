@@ -249,14 +249,28 @@ private:
     typedef typename AllocType::template rebind<delete_node>::other alloc_type;
 
     KeyType delete_key;
+    bool has_value;
+    ValueType delete_value;
 
-    inline void initialize(const KeyType &key, node *n) {
+    inline void initialize_no_value(const KeyType &key, node *n) {
       delete_key = key;
+      has_value = false;
+      delta_node::initialize(NodeType::delete_node, n->get_size() - 1, n);
+    }
+
+    inline void initialize_with_value(const DataPairType &pair, node *n) {
+      delete_key = pair.first;
+      delete_value = pair.second;
+      has_value = true;
       delta_node::initialize(NodeType::delete_node, n->get_size() - 1, n);
     }
 
     inline KeyType get_key() const {
       return delete_key;
+    }
+
+    inline DataPairType get_data() const {
+      return std::make_pair(delete_key, delete_value);
     }
   };
 
@@ -326,7 +340,9 @@ private:
     // Atomically update the value using CAS
     inline void update(PID key, node* value) {
       for(;;) {
+        node *head = table[key];
         if(__sync_bool_compare_and_swap(&table[key], table[key], value) == true) {
+          static_cast<delta_node *>(value)->set_base(head);
           break;  // Update success
         }
       }
@@ -500,9 +516,16 @@ private:
   }
 
   /// Allocate and initialize an delete delta node
-  inline delete_node *allocate_delete(const KeyType &key, node *base) {
+  inline delete_node *allocate_delete_no_value(const KeyType &key, node *base) {
     delete_node *n = new (delete_node_allocator().allocate(1)) delete_node();
-    n->initialize(key, base);
+    n->initialize_no_value(key, base);
+    return n;
+  }
+
+  /// Allocate and initialize an delete delta node
+  inline delete_node *allocate_delete_with_value(const DataPairType &key, node *base) {
+    delete_node *n = new (delete_node_allocator().allocate(1)) delete_node();
+    n->initialize_with_value(key, base);
     return n;
   }
 
@@ -560,33 +583,37 @@ private:
 
   inline std::vector<DataPairType> get_all_data(node *n) const {
     std::vector<DataPairType> inserted;
-    std::vector<KeyType> deleted;
+    std::vector<DataPairType> deleted;
+    std::vector<KeyType> deleted_key;
     bool has_split = false;
     KeyType split_key;
 
     DataPairType data;
-    KeyType key;
 
     while (n->is_delta()) {
       switch (n->get_type()) {
         case NodeType::insert_node:
           data = static_cast<insert_node *>(n)->get_data();
           if ((!has_split || key_less(data.first, split_key))
-              && !key_vector_contains_key(deleted, data.first)) {
+              && !vector_contains_data(deleted, data)
+              && !key_vector_contains_key(deleted_key, data.first)) {
             inserted.push_back(data);
           }
           break;
 
         case NodeType::delete_node:
-          key = static_cast<delete_node *>(n)->get_key();
-          deleted.push_back(key);
+          if (static_cast<delete_node *>(n)->has_value) {
+            deleted.push_back(static_cast<delete_node *>(n)->get_data());
+          } else {
+            deleted_key.push_back(static_cast<delete_node *>(n)->get_key());
+          }
           break;
 
         case NodeType::update_node:
           data = static_cast<update_node *>(n)->get_data();
           if ((!has_split || key_less(data.first, split_key))
-              && key_vector_contains_key(deleted, data.first)
-              && vector_contains_key(inserted, data.first)) {
+              && !vector_contains_data(deleted, data)
+              && !key_vector_contains_key(deleted_key, data.first)) {
             inserted.push_back(data);
           }
           break;
@@ -635,6 +662,22 @@ private:
   inline bool vector_contains_key(std::vector<DataPairType> data, const KeyType &key) const {
     for (auto it = data.begin() ; it != data.end(); ++it) {
       if(key_equal(key, it->first)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+
+  // Helper function for checking if the data is in the vector.
+  inline bool vector_contains_data(std::vector<DataPairType> data, const DataPairType &pair) const {
+    KeyType key = pair.first;
+    ValueType value = pair.second;
+    for (auto it = data.begin() ; it != data.end(); ++it) {
+      if(key_equal(key, it->first)
+        && value.block == (it->second).block
+        && value.offset == (it->second).offset) {
+
         return true;
       }
     }
@@ -693,11 +736,13 @@ private:
 public:
   void insert_data(const DataPairType &x);
   void delete_key(const KeyType &x);
+  void delete_data(const DataPairType &x);
   void update_data(const DataPairType &x);
   void split_leaf(PID pid);
   bool exists(const KeyType &key);
-  std::vector<std::pair<KeyType, ValueType>> search(const KeyType &key);
-  std::vector<std::pair<KeyType, ValueType>> search_range(const KeyType &low_key, const KeyType &high_key);
+  std::vector<DataPairType> search(const KeyType &key);
+  std::vector<DataPairType> search_all();
+  std::vector<DataPairType> search_range(const KeyType &low_key, const KeyType &high_key);
   size_t count(const KeyType &key);
 
 };

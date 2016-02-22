@@ -44,11 +44,10 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::insert_data(
   // check whether the leaf node contains the key, need api
 
   insert_node *insert_delta = allocate_insert(x, curr_node);
-  insert_delta->set_base(curr_node);
   set_node(curr_pid, insert_delta);
-  if (insert_delta->is_full()) {
-    split_leaf(curr_pid);
-  }
+  // if (insert_delta->is_full()) {
+  //   split_leaf(curr_pid);
+  // }
   LOG_INFO("insert is done");
 
 }
@@ -78,14 +77,13 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::update_data(
 
 
   update_node *update_delta = allocate_update(x, curr_node);
-  update_delta->set_base(curr_node);
   set_node(curr_pid, update_delta);
 
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
 void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::delete_key(const KeyType &x) {
-  LOG_INFO("delete is called");
+  LOG_INFO("delete key is called");
 
   if (m_root == NULL_PID) {
     m_root = m_headleaf = m_tailleaf = allocate_leaf();
@@ -105,10 +103,41 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::delete_key(c
   
   // check whether the leaf node contains the key, need api
 
-  delete_node *delete_delta = allocate_delete(x, curr_node);
-  delete_delta->set_base(curr_node);
+  delete_node *delete_delta = allocate_delete_no_value(x, curr_node);
   set_node(curr_pid, delete_delta);
-  LOG_INFO("delete is done");
+  LOG_INFO("delete key is done");
+
+}
+
+
+
+template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
+void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::delete_data(const DataPairType &x) {
+  LOG_INFO("delete data is called");
+
+  if (m_root == NULL_PID) {
+    m_root = m_headleaf = m_tailleaf = allocate_leaf();
+  }
+
+  KeyType key = x.first;
+
+  PID curr_pid = m_root;
+  node *curr_node = get_node(m_root);
+
+  while (!curr_node->is_leaf()) {
+    while (curr_node->is_delta()) {
+      curr_node = static_cast<delta_node *>(curr_node)->get_base();
+    }
+    unsigned short slot = find_lower(static_cast<inner_node *>(curr_node), key);
+    curr_pid = static_cast<inner_node *>(curr_node)->child_pid[slot];
+    curr_node = get_node(curr_pid);
+  }
+  
+  // check whether the leaf node contains the key, need api
+
+  delete_node *delete_delta = allocate_delete_with_value(x, curr_node);
+  set_node(curr_pid, delete_delta);
+  LOG_INFO("delete data is done");
 
 }
 
@@ -210,6 +239,34 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
     }
   }
   LOG_INFO("search is done");
+  return result;
+}
+
+
+template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
+std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::search_all() {
+  std::vector<DataPairType> result;
+  PID leaf_pid = m_root;
+  LOG_INFO("search all is called");
+  if(leaf_pid < 0) {
+    return result;
+  }
+
+  // Find the leaf node and retrieve all records in the node
+  node* leaf = mapping_table.get(leaf_pid);
+  auto node_data = get_all_data(leaf);
+  LOG_INFO("get_all_data is done");
+
+  // Check if we have a match (possible improvement: implement binary search)
+  for (auto it = node_data.begin() ; it != node_data.end(); ++it) {
+    // For duplicate keys, there's an edge case that some records can be placed at the
+    // next node so we need to check the next page as well.
+//    if(it != node_data.end() && (next(it) == node_data.end()) && key_equal(key, it->first)) {
+//      // TODO: handle duplicate keys
+//    }
+    result.push_back(*it);
+  }
+  LOG_INFO("search all is done");
   return result;
 }
 

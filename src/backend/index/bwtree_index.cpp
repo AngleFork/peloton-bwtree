@@ -55,7 +55,7 @@ bool BWTreeIndex<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteE
 
   // // TODO: add the code for checking values
 
-  container.delete_key(index_key);
+  container.delete_data(std::pair<KeyType, ValueType>(index_key, location));
   return false;
 }
 
@@ -75,7 +75,11 @@ template <typename KeyType, typename ValueType, class KeyComparator, class KeyEq
 std::vector<ItemPointer>
 BWTreeIndex<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::ScanAllKeys() {
   std::vector<ItemPointer> result;
-  // Add your implementation here
+
+  auto entries = container.search_all();
+  for (auto entry = entries.begin(); entry != entries.end(); ++entry) {
+    result.push_back(entry->second);
+  }
   return result;
 }
 
