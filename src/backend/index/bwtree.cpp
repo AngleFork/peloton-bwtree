@@ -76,7 +76,7 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::UpdateData(c
   // check whether the leaf node contains the key, need api
 
 
-  UpdateNode *update_delta = allocate_update(x, curr_node);
+  UpdateNode *update_delta = AllocateUpdate(x, curr_node);
   SetNode(curr_pid, update_delta);
 
 }
@@ -135,7 +135,7 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteData(c
   
   // check whether the leaf node contains the key, need api
 
-  DeleteNode *delete_delta = allocate_delete_with_value(x, curr_node);
+  DeleteNode *delete_delta = AllocateDeleteWithValue(x, curr_node);
   SetNode(curr_pid, delete_delta);
   LOG_INFO("delete data is done");
 
@@ -168,7 +168,7 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SplitLeaf(PI
   base_node->SetNext(next_leaf_pid);
   former_next_leaf->SetPrev(next_leaf_pid);
 
-  SplitNode *split_delta = allocate_split(split_key, next_leaf_pid, buffer.size() - buffer.size() / 2, n);
+  SplitNode *split_delta = AllocateSplit(split_key, next_leaf_pid, buffer.size() - buffer.size() / 2, n);
   split_delta->SetBase(n);
   SetNode(pid, split_delta);
 
@@ -190,7 +190,7 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SplitLeaf(PI
     right_key = split_key;
   else
     right_key = parent_base_node->slot_key[slot];
-  SeparatorNode *separator_delta = allocate_separator(split_key, right_key, next_leaf_pid, parent);
+  SeparatorNode *separator_delta = AllocateSeparator(split_key, right_key, next_leaf_pid, parent);
   separator_delta->SetBase(parent);
   SetNode(parent_pid, separator_delta);
 }
@@ -203,7 +203,7 @@ bool BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::Exists(const
     return false;
   }
 
-  Node* leaf = mapping_table.get(leaf_pid);
+  Node* leaf = mapping_table.Get(leaf_pid);
 
   // Traversing delta chain here will be more efficient since we dont have to loop till base for some cases.
   // But for simplicity, we call get_all_data() and check if the key is in the returned vector.
@@ -222,7 +222,7 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
   }
 
   // Find the leaf node and retrieve all records in the node
-  Node* leaf = mapping_table.get(leaf_pid);
+  Node* leaf = mapping_table.Get(leaf_pid);
   auto node_data = GetAllData(leaf);
   LOG_INFO("get_all_data is done");
 
@@ -253,7 +253,7 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
   }
 
   // Find the leaf node and retrieve all records in the node
-  Node* leaf = mapping_table.get(leaf_pid);
+  Node* leaf = mapping_table.Get(leaf_pid);
   auto node_data = GetAllData(leaf);
   LOG_INFO("get_all_data is done");
 

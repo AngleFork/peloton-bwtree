@@ -360,9 +360,22 @@ private:
 //      table[key] = 0;
     }
 
+    inline int GetSize() {
+      return MAPPING_TABLE_SIZE;
+    }
+
     // Get physical pointer from PID
-    inline Node* get(PID key) {
+    inline Node* Get(PID key) {
       return table[key];
+    }
+
+    // This will be changed if we will not use array
+    inline bool ContainsValue(PID key) {
+      if(table[key] == 0) {
+        return false;
+      } else {
+        return true;
+      }
     }
 
     ~MappingTable(){
@@ -408,7 +421,7 @@ public:
 
   /// Frees up all used B+ tree memory pages
   inline ~BWTree() {
-    // clear();
+    Clear();
   }
 
 private:
@@ -524,28 +537,28 @@ private:
   }
 
   /// Allocate and initialize an delete delta node
-  inline DeleteNode *allocate_delete_with_value(const DataPairType &key, Node *base) {
+  inline DeleteNode *AllocateDeleteWithValue(const DataPairType &key, Node *base) {
     DeleteNode *n = new (DeleteNodeAllocator().allocate(1)) DeleteNode();
     n->InitializeWithValue(key, base);
     return n;
   }
 
   /// Allocate and initialize an insert delta node
-  inline UpdateNode *allocate_update(const DataPairType &pair, Node *base) {
+  inline UpdateNode *AllocateUpdate(const DataPairType &pair, Node *base) {
     UpdateNode *n = new (UpdateNodeAllocator().allocate(1)) UpdateNode();
     n->Initialize(pair, base);
     return n;
   }
 
   /// Allocate and initialize an split delta node
-  inline SplitNode *allocate_split(KeyType &key, PID leaf, unsigned short size, Node *base) {
+  inline SplitNode *AllocateSplit(KeyType &key, PID leaf, unsigned short size, Node *base) {
     SplitNode *n = new (SplitNodeAllocator().allocate(1)) SplitNode();
     n->Initialize(key, leaf, size, base);
     return n;
   }
 
   /// Allocate and initialize an separator delta node
-  inline SeparatorNode *allocate_separator(KeyType &left_key, KeyType &right_key, PID leaf, Node *base) {
+  inline SeparatorNode *AllocateSeparator(KeyType &left_key, KeyType &right_key, PID leaf, Node *base) {
     SeparatorNode *n = new (SeparateNodeAllocator().allocate(1)) SeparatorNode();
     n->Initialize(left_key, right_key, leaf, base);
     return n;
@@ -553,7 +566,7 @@ private:
 
   /// Correctly free either inner or leaf node, destructs all contained key
   /// and value objects & frees delta nodes
-  inline void free_node(Node *n)
+  inline void FreeNode(Node *n)
   {
     if (n->IsLeaf()) {
       LeafNode *ln = static_cast<LeafNode*>(n);
@@ -583,7 +596,39 @@ private:
     }
   }
 
+public:
+  void Clear() {
+    if(m_root) {
+      ClearRecursive(m_root);
+    }
+
+  }
+
+
 private:
+
+  void ClearRecursive(PID pid) {
+    Node* node = mapping_table.Get(pid);
+    while(node->IsDelta()) {
+      Node* prev= node;
+      node = static_cast<DeltaNode *>(node)->GetBase();
+      FreeNode(prev);
+    }
+
+    if(node->IsLeaf()) {
+      LeafNode* leaf_node = static_cast<LeafNode*>(node);
+      FreeNode(leaf_node);
+
+    } else {
+      InnerNode* inner_node = static_cast<InnerNode *>(node);
+      for (unsigned short slot = 0; slot < inner_node->slot_use + 1; ++slot)
+      {
+        ClearRecursive(inner_node->child_pid[slot]);
+        FreeNode(inner_node);
+      }
+
+    }
+  }
 
   inline PID AllocatePID() {
     pid_counter++;
@@ -591,9 +636,9 @@ private:
   }
 
   inline Node *GetNode(PID pid) {
-    if (mapping_table.get(pid) == NULL)
+    if (mapping_table.Get(pid) == NULL)
       return NULL;
-    return mapping_table.get(pid);
+    return mapping_table.Get(pid);
   }
 
   inline void SetNode(PID pid, Node *n) {
@@ -731,7 +776,7 @@ private:
   // Currently, returns -1 for error
   inline PID GetLeafNodePID(const KeyType &key) {
     PID current_pid = m_root;
-    Node* current = mapping_table.get(m_root);
+    Node* current = mapping_table.Get(m_root);
 
     if(!current) return -1;
 
@@ -758,7 +803,7 @@ private:
           const InnerNode* current_inner = static_cast<const InnerNode *>(current);
           int slot = FindLower(current_inner, key);
           current_pid = current_inner->child_pid[slot];
-          current = mapping_table.get(current_pid);
+          current = mapping_table.Get(current_pid);
           break;
       }
     }
@@ -766,88 +811,33 @@ private:
     return current_pid;
   }
 
+private:
+  size_t Count(const KeyType &key);
+  // Split/ Merge are internal
+  void SplitLeaf(PID pid);
+
 public:
+  // BW Tree API
   void InsertData(const DataPairType &x);
   void DeleteKey(const KeyType &x);
   void DeleteData(const DataPairType &x);
   void UpdateData(const DataPairType &x);
-  void SplitLeaf(PID pid);
   bool Exists(const KeyType &key);
   std::vector<DataPairType> Search(const KeyType &key);
   std::vector<DataPairType> SearchAll();
   std::vector<DataPairType> SearchRange(const KeyType &low_key, const KeyType &high_key);
-  size_t Count(const KeyType &key);
 
 
 public:
   // *** Debug Printing
 
-  /// Print out the B+ tree structure with keys onto the given ostream.
+  // Print out the BW tree structure.
   void Print();
-
-  /// Print out only the leaves via the double linked list.
-//  inline std::string print_leaves() const
-//  {
-//    std::stringstream os;
-//    os << "leaves:\n";
-//
-//    const leaf_node *n = mapping_table.get(m_headleaf);
-//
-//    while(n)
-//    {
-//      os << "  " << n << "\n";
-//
-//      n = mapping_table.get(n->next_leaf);
-//    }
-//    return os.str();
-//  }
 
 private:
 
-  /// Recursively descend down the tree and print out nodes.
-//  static void print_node(std::ostream &os, const node* node, unsigned int depth=0, bool recursive=false)
-//  {
-//    for(unsigned int i = 0; i < depth; i++) os << "  ";
-//
-//    os << "node " << node << " level " << node->level << " slotuse " << node->slotuse << std::endl;
-//
-//    if (node->isleafnode())
-//    {
-//      const leaf_node *leafnode = static_cast<const leaf_node*>(node);
-//
-//      for(unsigned int i = 0; i < depth; i++) os << "  ";
-//      os << "  leaf prev " << leafnode->prevleaf << " next " << leafnode->nextleaf << std::endl;
-//
-//      for(unsigned int i = 0; i < depth; i++) os << "  ";
-//
-//      for (unsigned int slot = 0; slot < leafnode->slotuse; ++slot)
-//      {
-//        os << leafnode->slotkey[slot] << "  "; // << "(data: " << leafnode->slotdata[slot] << ") ";
-//      }
-//      os << std::endl;
-//    }
-//    else
-//    {
-//      const inner_node *innernode = static_cast<const inner_node*>(node);
-//
-//      for(unsigned int i = 0; i < depth; i++) os << "  ";
-//
-//      for (unsigned short slot = 0; slot < innernode->slotuse; ++slot)
-//      {
-//        os << "(" << innernode->childid[slot] << ") " << innernode->slotkey[slot] << " ";
-//      }
-//      os << "(" << innernode->childid[innernode->slotuse] << ")" << std::endl;
-//
-//      if (recursive)
-//      {
-//        for (unsigned short slot = 0; slot < innernode->slotuse + 1; ++slot)
-//        {
-//          print_node(os, innernode->childid[slot], depth + 1, recursive);
-//        }
-//      }
-//    }
-//  }
-
+  // Print out the BW tree node
+  void PrintNode(const Node* node);
 };
 
 }  // End index namespace
