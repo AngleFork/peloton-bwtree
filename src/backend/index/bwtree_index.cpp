@@ -22,6 +22,7 @@ template <typename KeyType, typename ValueType, class KeyComparator, class KeyEq
 BWTreeIndex<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::BWTreeIndex(
     IndexMetadata *metadata)
     : Index(metadata),
+      container(KeyComparator(metadata)),
       equals(metadata),
       comparator(metadata) {
   // Add your implementation here
@@ -35,14 +36,25 @@ BWTreeIndex<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::~BWTreeIndex
 template <typename KeyType, typename ValueType, class KeyComparator, class KeyEqualityChecker>
 bool BWTreeIndex<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::InsertEntry(
     __attribute__((unused)) const storage::Tuple *key, __attribute__((unused)) const ItemPointer location) {
-  // Add your implementation here
-  return false;
+
+  KeyType index_key;
+  index_key.SetFromKey(key);
+
+  container.InsertData(std::pair<KeyType, ValueType>(index_key, location));
+  // container.split_leaf(0);
+  return true;
 }
 
 template <typename KeyType, typename ValueType, class KeyComparator, class KeyEqualityChecker>
 bool BWTreeIndex<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteEntry(
     __attribute__((unused)) const storage::Tuple *key, __attribute__((unused)) const ItemPointer location) {
-  // Add your implementation here
+
+  KeyType index_key;
+  index_key.SetFromKey(key);
+
+  // // TODO: add the code for checking values
+
+  container.DeleteData(std::pair<KeyType, ValueType>(index_key, location));
   return false;
 }
 
@@ -62,7 +74,11 @@ template <typename KeyType, typename ValueType, class KeyComparator, class KeyEq
 std::vector<ItemPointer>
 BWTreeIndex<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::ScanAllKeys() {
   std::vector<ItemPointer> result;
-  // Add your implementation here
+
+  auto entries = container.SearchAll();
+  for (auto entry = entries.begin(); entry != entries.end(); ++entry) {
+    result.push_back(entry->second);
+  }
   return result;
 }
 
@@ -74,7 +90,13 @@ std::vector<ItemPointer>
 BWTreeIndex<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::ScanKey(
     __attribute__((unused)) const storage::Tuple *key) {
   std::vector<ItemPointer> result;
-  // Add your implementation here
+  KeyType index_key;
+
+  index_key.SetFromKey(key);
+  auto entries = container.Search(index_key);
+  for (auto entry = entries.begin(); entry != entries.end(); ++entry) {
+    result.push_back(entry->second);
+  }
   return result;
 }
 
