@@ -40,9 +40,8 @@ bool BWTreeIndex<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::InsertE
   KeyType index_key;
   index_key.SetFromKey(key);
 
-  container.insert_data(std::pair<KeyType, ValueType>(index_key, location));
+  container.InsertData(std::pair<KeyType, ValueType>(index_key, location));
   // container.split_leaf(0);
-
   return true;
 }
 
@@ -55,7 +54,7 @@ bool BWTreeIndex<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteE
 
   // // TODO: add the code for checking values
 
-  container.delete_data(std::pair<KeyType, ValueType>(index_key, location));
+  container.DeleteData(std::pair<KeyType, ValueType>(index_key, location));
   return false;
 }
 
@@ -76,7 +75,7 @@ std::vector<ItemPointer>
 BWTreeIndex<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::ScanAllKeys() {
   std::vector<ItemPointer> result;
 
-  auto entries = container.search_all();
+  auto entries = container.SearchAll();
   for (auto entry = entries.begin(); entry != entries.end(); ++entry) {
     result.push_back(entry->second);
   }
@@ -94,7 +93,7 @@ BWTreeIndex<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::ScanKey(
   KeyType index_key;
 
   index_key.SetFromKey(key);
-  auto entries = container.search(index_key);
+  auto entries = container.Search(index_key);
   for (auto entry = entries.begin(); entry != entries.end(); ++entry) {
     result.push_back(entry->second);
   }

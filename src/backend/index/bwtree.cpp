@@ -20,31 +20,31 @@ namespace peloton {
 namespace index {
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
-void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::insert_data(__attribute__((unused)) const DataPairType &x) {
+void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::InsertData(__attribute__((unused)) const DataPairType &x) {
   LOG_INFO("insert is called");
 
   if (m_root == NULL_PID) {
-    m_root = m_headleaf = m_tailleaf = allocate_leaf();
+    m_root = m_headleaf = m_tailleaf = AllocateLeaf();
   }
 
   KeyType key = x.first;
 
   PID curr_pid = m_root;
-  node *curr_node = get_node(m_root);
+  Node *curr_node = GetNode(m_root);
 
-  while (!curr_node->is_leaf()) {
-    while (curr_node->is_delta()) {
-      curr_node = static_cast<delta_node *>(curr_node)->get_base();
+  while (!curr_node->IsLeaf()) {
+    while (curr_node->IsDelta()) {
+      curr_node = static_cast<DeltaNode *>(curr_node)->GetBase();
     }
-    unsigned short slot = find_lower(static_cast<inner_node *>(curr_node), key);
-    curr_pid = static_cast<inner_node *>(curr_node)->child_pid[slot];
-    curr_node = get_node(curr_pid);
+    unsigned short slot = FindLower(static_cast<InnerNode *>(curr_node), key);
+    curr_pid = static_cast<InnerNode *>(curr_node)->child_pid[slot];
+    curr_node = GetNode(curr_pid);
   }
 
   // check whether the leaf node contains the key, need api
 
-  insert_node *insert_delta = allocate_insert(x, curr_node);
-  set_node(curr_pid, insert_delta);
+  InsertNode *insert_delta = AllocateInsert(x, curr_node);
+  SetNode(curr_pid, insert_delta);
   // if (insert_delta->is_full()) {
   //   split_leaf(curr_pid);
   // }
@@ -53,58 +53,58 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::insert_data(
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
-void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::update_data(const DataPairType &x) {
+void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::UpdateData(const DataPairType &x) {
 
   if (m_root == NULL_PID) {
-    m_root = m_headleaf = m_tailleaf = allocate_leaf();
+    m_root = m_headleaf = m_tailleaf = AllocateLeaf();
   }
 
   KeyType key = x.first;
 
   PID curr_pid = m_root;
-  node *curr_node = get_node(m_root);
+  Node *curr_node = GetNode(m_root);
 
-  while (!curr_node->is_leaf()) {
-    while (curr_node->is_delta()) {
-      curr_node = static_cast<delta_node *>(curr_node)->get_base();
+  while (!curr_node->IsLeaf()) {
+    while (curr_node->IsDelta()) {
+      curr_node = static_cast<DeltaNode *>(curr_node)->GetBase();
     }
-    unsigned short slot = find_lower(static_cast<inner_node *>(curr_node), key);
-    curr_pid = static_cast<inner_node *>(curr_node)->child_pid[slot];
-    curr_node = get_node(curr_pid);
+    unsigned short slot = FindLower(static_cast<InnerNode *>(curr_node), key);
+    curr_pid = static_cast<InnerNode *>(curr_node)->child_pid[slot];
+    curr_node = GetNode(curr_pid);
   }
 
   // check whether the leaf node contains the key, need api
 
 
-  update_node *update_delta = allocate_update(x, curr_node);
-  set_node(curr_pid, update_delta);
+  UpdateNode *update_delta = allocate_update(x, curr_node);
+  SetNode(curr_pid, update_delta);
 
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
-void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::delete_key(const KeyType &x) {
+void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteKey(const KeyType &x) {
   LOG_INFO("delete key is called");
 
   if (m_root == NULL_PID) {
-    m_root = m_headleaf = m_tailleaf = allocate_leaf();
+    m_root = m_headleaf = m_tailleaf = AllocateLeaf();
   }
 
   PID curr_pid = m_root;
-  node *curr_node = get_node(m_root);
+  Node *curr_node = GetNode(m_root);
 
-  while (!curr_node->is_leaf()) {
-    while (curr_node->is_delta()) {
-      curr_node = static_cast<delta_node *>(curr_node)->get_base();
+  while (!curr_node->IsLeaf()) {
+    while (curr_node->IsDelta()) {
+      curr_node = static_cast<DeltaNode *>(curr_node)->GetBase();
     }
-    unsigned short slot = find_lower(static_cast<inner_node *>(curr_node), x);
-    curr_pid = static_cast<inner_node *>(curr_node)->child_pid[slot];
-    curr_node = get_node(curr_pid);
+    unsigned short slot = FindLower(static_cast<InnerNode *>(curr_node), x);
+    curr_pid = static_cast<InnerNode *>(curr_node)->child_pid[slot];
+    curr_node = GetNode(curr_pid);
   }
   
   // check whether the leaf node contains the key, need api
 
-  delete_node *delete_delta = allocate_delete_no_value(x, curr_node);
-  set_node(curr_pid, delete_delta);
+  DeleteNode *delete_delta = AllocateDeleteNoValue(x, curr_node);
+  SetNode(curr_pid, delete_delta);
   LOG_INFO("delete key is done");
 
 }
@@ -112,118 +112,118 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::delete_key(c
 
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
-void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::delete_data(const DataPairType &x) {
+void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteData(const DataPairType &x) {
   LOG_INFO("delete data is called");
 
   if (m_root == NULL_PID) {
-    m_root = m_headleaf = m_tailleaf = allocate_leaf();
+    m_root = m_headleaf = m_tailleaf = AllocateLeaf();
   }
 
   KeyType key = x.first;
 
   PID curr_pid = m_root;
-  node *curr_node = get_node(m_root);
+  Node *curr_node = GetNode(m_root);
 
-  while (!curr_node->is_leaf()) {
-    while (curr_node->is_delta()) {
-      curr_node = static_cast<delta_node *>(curr_node)->get_base();
+  while (!curr_node->IsLeaf()) {
+    while (curr_node->IsDelta()) {
+      curr_node = static_cast<DeltaNode *>(curr_node)->GetBase();
     }
-    unsigned short slot = find_lower(static_cast<inner_node *>(curr_node), key);
-    curr_pid = static_cast<inner_node *>(curr_node)->child_pid[slot];
-    curr_node = get_node(curr_pid);
+    unsigned short slot = FindLower(static_cast<InnerNode *>(curr_node), key);
+    curr_pid = static_cast<InnerNode *>(curr_node)->child_pid[slot];
+    curr_node = GetNode(curr_pid);
   }
   
   // check whether the leaf node contains the key, need api
 
-  delete_node *delete_delta = allocate_delete_with_value(x, curr_node);
-  set_node(curr_pid, delete_delta);
+  DeleteNode *delete_delta = allocate_delete_with_value(x, curr_node);
+  SetNode(curr_pid, delete_delta);
   LOG_INFO("delete data is done");
 
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
-void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::split_leaf(PID pid) {
+void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SplitLeaf(PID pid) {
 
-  node *n = get_node(pid);
-  leaf_node *base_node = static_cast<leaf_node *>(get_base_node(n));
+  Node *n = GetNode(pid);
+  LeafNode *base_node = static_cast<LeafNode *>(GetBaseNode(n));
 
-  PID former_next_leaf_pid = static_cast<leaf_node *>(base_node)->get_next();
-  leaf_node *former_next_leaf = static_cast<leaf_node *>(get_node(former_next_leaf_pid));
+  PID former_next_leaf_pid = static_cast<LeafNode *>(base_node)->GetNext();
+  LeafNode *former_next_leaf = static_cast<LeafNode *>(GetNode(former_next_leaf_pid));
 
-  std::vector<DataPairType> buffer = get_all_data(n);
+  std::vector<DataPairType> buffer = GetAllData(n);
 
   // split delta node
   unsigned short pos = static_cast<unsigned short>(buffer.size()) / 2;
   KeyType split_key = buffer[pos].first;
 
-  PID next_leaf_pid = allocate_leaf();
-  leaf_node *next_leaf = static_cast<leaf_node *>(get_node(next_leaf_pid));
+  PID next_leaf_pid = AllocateLeaf();
+  LeafNode *next_leaf = static_cast<LeafNode *>(GetNode(next_leaf_pid));
   for (unsigned short slot = buffer.size() / 2; slot < buffer.size(); slot++) {
-    next_leaf->set_slot(slot, buffer[slot]);
+    next_leaf->SetSlot(slot, buffer[slot]);
   }
 
-  next_leaf->set_next(former_next_leaf_pid);
-  next_leaf->set_prev(pid);
+  next_leaf->SetNext(former_next_leaf_pid);
+  next_leaf->SetPrev(pid);
 
-  base_node->set_next(next_leaf_pid);
-  former_next_leaf->set_prev(next_leaf_pid);
+  base_node->SetNext(next_leaf_pid);
+  former_next_leaf->SetPrev(next_leaf_pid);
 
-  split_node *split_delta = allocate_split(split_key, next_leaf_pid, buffer.size() - buffer.size() / 2, n);
-  split_delta->set_base(n);
-  set_node(pid, split_delta);
+  SplitNode *split_delta = allocate_split(split_key, next_leaf_pid, buffer.size() - buffer.size() / 2, n);
+  split_delta->SetBase(n);
+  SetNode(pid, split_delta);
 
   // separator delta node
 
   // create a inner node for root
   if (m_root == pid) {
-    PID new_root = allocate_inner(1);
-    base_node->set_parent(new_root);
+    PID new_root = AllocateInner(1);
+    base_node->SetParent(new_root);
     m_root = new_root;
   }
 
-  PID parent_pid = base_node->get_parent();
-  node *parent = get_node(parent_pid);
-  inner_node *parent_base_node = static_cast<inner_node *>(get_base_node(parent));
-  unsigned short slot = find_lower(parent_base_node, split_key);
+  PID parent_pid = base_node->GetParent();
+  Node *parent = GetNode(parent_pid);
+  InnerNode *parent_base_node = static_cast<InnerNode *>(GetBaseNode(parent));
+  unsigned short slot = FindLower(parent_base_node, split_key);
   KeyType right_key;
-  if (slot >= parent_base_node->get_size())
+  if (slot >= parent_base_node->GetSize())
     right_key = split_key;
   else
     right_key = parent_base_node->slot_key[slot];
-  separator_node *separator_delta = allocate_separator(split_key, right_key, next_leaf_pid, parent);
-  separator_delta->set_base(parent);
-  set_node(parent_pid, separator_delta);
+  SeparatorNode *separator_delta = allocate_separator(split_key, right_key, next_leaf_pid, parent);
+  separator_delta->SetBase(parent);
+  SetNode(parent_pid, separator_delta);
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
-bool BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::exists(const KeyType &key) {
-  PID leaf_pid = get_leaf_node_pid(key);
+bool BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::Exists(const KeyType &key) {
+  PID leaf_pid = GetLeafNodePID(key);
 
   if(leaf_pid < 0) {
     return false;
   }
 
-  node* leaf = mapping_table.get(leaf_pid);
+  Node* leaf = mapping_table.get(leaf_pid);
 
   // Traversing delta chain here will be more efficient since we dont have to loop till base for some cases.
   // But for simplicity, we call get_all_data() and check if the key is in the returned vector.
-  std::vector<DataPairType> node_data = get_all_data(leaf);
+  std::vector<DataPairType> node_data = GetAllData(leaf);
 
-  return vector_contains_key(node_data, key);
+  return VectorContainsKey(node_data, key);
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
-std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::search(const KeyType &key) {
+std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::Search(const KeyType &key) {
   std::vector<DataPairType> result;
-  PID leaf_pid = get_leaf_node_pid(key);
+  PID leaf_pid = GetLeafNodePID(key);
   LOG_INFO("search is called");
   if(leaf_pid < 0) {
     return result;
   }
 
   // Find the leaf node and retrieve all records in the node
-  node* leaf = mapping_table.get(leaf_pid);
-  auto node_data = get_all_data(leaf);
+  Node* leaf = mapping_table.get(leaf_pid);
+  auto node_data = GetAllData(leaf);
   LOG_INFO("get_all_data is done");
 
   // Check if we have a match (possible improvement: implement binary search)
@@ -233,7 +233,7 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
 //    if(it != node_data.end() && (next(it) == node_data.end()) && key_equal(key, it->first)) {
 //      // TODO: handle duplicate keys
 //    }
-    if(key_equal(key, it->first)) {
+    if(KeyEqual(key, it->first)) {
       LOG_INFO("key match found");
       result.push_back(*it);
     }
@@ -244,7 +244,7 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
 
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
-std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::search_all() {
+std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SearchAll() {
   std::vector<DataPairType> result;
   PID leaf_pid = m_root;
   LOG_INFO("search all is called");
@@ -253,8 +253,8 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
   }
 
   // Find the leaf node and retrieve all records in the node
-  node* leaf = mapping_table.get(leaf_pid);
-  auto node_data = get_all_data(leaf);
+  Node* leaf = mapping_table.get(leaf_pid);
+  auto node_data = GetAllData(leaf);
   LOG_INFO("get_all_data is done");
 
   // Check if we have a match (possible improvement: implement binary search)
@@ -271,10 +271,10 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
-std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::search_range(const KeyType &low, const KeyType &high) {
+std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SearchRange(const KeyType &low, const KeyType &high) {
   std::vector<DataPairType> result;
-  PID low_pid = get_leaf_node_pid(low);
-  PID high_pid = get_leaf_node_pid(high);
+  PID low_pid = GetLeafNodePID(low);
+  PID high_pid = GetLeafNodePID(high);
 
   if(low_pid < 0 || high_pid < 0) {
     return result;
@@ -293,6 +293,14 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
   return result;
 
 }
+
+// Debug Purpose
+template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
+void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::Print() {
+  LOG_INFO("bw tree print");
+
+}
+
 
 template class BWTree<IntsKey<1>, ItemPointer, IntsComparator<1>,
         IntsEqualityChecker<1>>;
