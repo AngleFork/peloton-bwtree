@@ -479,9 +479,8 @@ TEST(IndexTests, ReverseIteratorTest) {
   locations = index->Scan(values, column_ids, exprs, SCAN_DIRECTION_TYPE_BACKWARD);
   EXPECT_EQ(locations.size(), 9);
 
-  std::vector<ItemPointer> items = {item0, item1, item2};
   for(size_t i = 0; i < locations.size(); i++) {
-    EXPECT_EQ(locations[i].block, items[2-((i + 2) % 3)].block);
+    EXPECT_EQ(locations[i].block, items[2- ((i + 2) % 3)].block);
   }
 
   delete tuple_schema;
