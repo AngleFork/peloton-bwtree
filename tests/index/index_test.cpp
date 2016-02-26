@@ -39,7 +39,7 @@ index::Index *BuildIndex() {
   std::vector<catalog::Schema *> schemas;
   IndexType index_type = INDEX_TYPE_BTREE;
   // TODO: Uncomment the line below
-//  index_type = INDEX_TYPE_BWTREE;
+  index_type = INDEX_TYPE_BWTREE;
 
   catalog::Column column1(VALUE_TYPE_INTEGER, GetTypeSize(VALUE_TYPE_INTEGER),
                           "A", true);
@@ -340,7 +340,7 @@ TEST(IndexTests, ComplexInsertDeleteTest) {
   delete tuple_schema;
 }
 
-TEST(IndexTests, SimpleSearchTest) {
+TEST(IndexTests, SimpleSearchScanTest) {
   auto pool = TestingHarness::GetInstance().GetTestingPool();
   std::vector<ItemPointer> locations;
 
