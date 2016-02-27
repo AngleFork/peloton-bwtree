@@ -339,25 +339,21 @@ private:
     }
 
     // Atomically update the value using CAS
-    inline void Update(PID key, Node* value) {
-      for(;;) {
-        Node *head = table[key];
-        if(__sync_bool_compare_and_swap(&table[key], table[key], value) == true) {
-          static_cast<DeltaNode *>(value)->SetBase(head);
-          break;  // Update success
-        }
+    inline bool Update(PID key, Node* value) {
+      Node *head = table[key];
+      if(__sync_bool_compare_and_swap(&table[key], table[key], value) == true) {
+        static_cast<DeltaNode *>(value)->SetBase(head);
+        return true;  // Update success
       }
-//      table[key] = value;
+      return false;
     }
 
     // Mark as null if remove is called
-    inline void Remove(PID key) {
-      for(;;) {
-        if(__sync_bool_compare_and_swap(&table[key], table[key], NULL) == true) {
-          break;  // Update success
-        }
+    inline bool Remove(PID key) {
+      if(__sync_bool_compare_and_swap(&table[key], table[key], NULL) == true) {
+        return true;
       }
-//      table[key] = 0;
+      return false;
     }
 
     inline int GetSize() {
@@ -793,6 +789,8 @@ private:
         case NodeType::update_node:
           break;
         case NodeType::split_node:
+          // if we are at the split node, check separator key K_p
+          // if key > K_p, we go to the side node in order to look up keys
           break;
         case NodeType::separator_node :
           break;

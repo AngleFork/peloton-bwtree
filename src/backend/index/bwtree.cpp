@@ -298,7 +298,6 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
 void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::Print() {
   LOG_INFO("bw tree print");
-
 }
 
 
