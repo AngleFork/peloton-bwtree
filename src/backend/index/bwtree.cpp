@@ -24,31 +24,50 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::InsertData(_
   LOG_INFO("insert is called");
 
   if (m_root == NULL_PID) {
-    m_root = m_headleaf = m_tailleaf = AllocateLeaf();
-  }
-
-  KeyType key = x.first;
-
-  PID curr_pid = m_root;
-  Node *curr_node = GetNode(m_root);
-
-  while (!curr_node->IsLeaf()) {
-    while (curr_node->IsDelta()) {
-      curr_node = static_cast<DeltaNode *>(curr_node)->GetBase();
+    LeafNode *leaf = AllocateLeaf();
+    PID pid = AllocatePID();
+    m_headleaf = pid;
+    for (;;) {
+      if (mapping_table.Update(pid, leaf, NULL, 0)) {
+        break;
+      }
     }
-    unsigned short slot = FindLower(static_cast<InnerNode *>(curr_node), key);
-    curr_pid = static_cast<InnerNode *>(curr_node)->child_pid[slot];
-    curr_node = GetNode(curr_pid);
+    m_root = m_headleaf = m_tailleaf = pid;
   }
 
-  // check whether the leaf node contains the key, need api
+  InsertNode *insert_delta;
+  PID curr_pid;
 
-  InsertNode *insert_delta = AllocateInsert(x, curr_node);
-  SetNode(curr_pid, insert_delta);
-  // if (insert_delta->is_full()) {
-  //   split_leaf(curr_pid);
-  // }
-  LOG_INFO("insert is done");
+  for (;;) {
+
+    KeyType key = x.first;
+
+    curr_pid = m_root;
+    Node *curr_node = GetNode(m_root);
+
+    while (!curr_node->IsLeaf()) {
+      // while (curr_node->IsDelta()) {
+      //   curr_node = static_cast<DeltaNode *>(curr_node)->GetBase();
+      // }
+      // unsigned short slot = FindLower(static_cast<InnerNode *>(curr_node), key);
+      // curr_pid = static_cast<InnerNode *>(curr_node)->child_pid[slot];
+      curr_pid = FindNextPID(curr_pid, key);
+      curr_node = GetNode(curr_pid);
+    }
+
+    // check whether the leaf node contains the key, need api
+
+    insert_delta = AllocateInsert(x, curr_node->GetLevel());
+    // SetNode(curr_pid, insert_delta);
+    if (mapping_table.Update(curr_pid, insert_delta, curr_node, 1)) {
+      break;
+    }
+  }
+  LOG_INFO("insert is done on pid = %ld", curr_pid);
+
+  if (insert_delta->IsFull()) {
+    SplitLeaf(curr_pid);
+  }
 
 }
 
@@ -56,28 +75,43 @@ template <typename KeyType, typename ValueType, typename KeyComparator, typename
 void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::UpdateData(const DataPairType &x) {
 
   if (m_root == NULL_PID) {
-    m_root = m_headleaf = m_tailleaf = AllocateLeaf();
-  }
-
-  KeyType key = x.first;
-
-  PID curr_pid = m_root;
-  Node *curr_node = GetNode(m_root);
-
-  while (!curr_node->IsLeaf()) {
-    while (curr_node->IsDelta()) {
-      curr_node = static_cast<DeltaNode *>(curr_node)->GetBase();
+    LeafNode *leaf = AllocateLeaf();
+    PID pid = AllocatePID();
+    m_headleaf = pid;
+    for (;;) {
+      if (mapping_table.Update(pid, leaf, NULL, 0)) {
+        break;
+      }
     }
-    unsigned short slot = FindLower(static_cast<InnerNode *>(curr_node), key);
-    curr_pid = static_cast<InnerNode *>(curr_node)->child_pid[slot];
-    curr_node = GetNode(curr_pid);
+    m_root = m_headleaf = m_tailleaf = pid;
   }
 
-  // check whether the leaf node contains the key, need api
+  for (;;) {
+
+    KeyType key = x.first;
+
+    PID curr_pid = m_root;
+    Node *curr_node = GetNode(m_root);
+
+    while (!curr_node->IsLeaf()) {
+      // while (curr_node->IsDelta()) {
+      //   curr_node = static_cast<DeltaNode *>(curr_node)->GetBase();
+      // }
+      // unsigned short slot = FindLower(static_cast<InnerNode *>(curr_node), key);
+      // curr_pid = static_cast<InnerNode *>(curr_node)->child_pid[slot];
+      curr_pid = FindNextPID(curr_pid, key);
+      curr_node = GetNode(curr_pid);
+    }
+
+    // check whether the leaf node contains the key, need api
 
 
-  UpdateNode *update_delta = AllocateUpdate(x, curr_node);
-  SetNode(curr_pid, update_delta);
+    UpdateNode *update_delta = AllocateUpdate(x, curr_node->GetLevel());
+    // SetNode(curr_pid, update_delta);
+    if (mapping_table.Update(curr_pid, update_delta, curr_node, 0)) {
+      break;
+    }
+  }
 
 }
 
@@ -86,25 +120,41 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteKey(co
   LOG_INFO("delete key is called");
 
   if (m_root == NULL_PID) {
-    m_root = m_headleaf = m_tailleaf = AllocateLeaf();
-  }
-
-  PID curr_pid = m_root;
-  Node *curr_node = GetNode(m_root);
-
-  while (!curr_node->IsLeaf()) {
-    while (curr_node->IsDelta()) {
-      curr_node = static_cast<DeltaNode *>(curr_node)->GetBase();
+    LeafNode *leaf = AllocateLeaf();
+    PID pid = AllocatePID();
+    m_headleaf = pid;
+    for (;;) {
+      if (mapping_table.Update(pid, leaf, NULL, 0)) {
+        break;
+      }
     }
-    unsigned short slot = FindLower(static_cast<InnerNode *>(curr_node), x);
-    curr_pid = static_cast<InnerNode *>(curr_node)->child_pid[slot];
-    curr_node = GetNode(curr_pid);
+    m_root = m_headleaf = m_tailleaf = pid;
   }
-  
-  // check whether the leaf node contains the key, need api
 
-  DeleteNode *delete_delta = AllocateDeleteNoValue(x, curr_node);
-  SetNode(curr_pid, delete_delta);
+  for (;;) {
+
+    PID curr_pid = m_root;
+    Node *curr_node = GetNode(m_root);
+
+    while (!curr_node->IsLeaf()) {
+      // while (curr_node->IsDelta()) {
+      //   curr_node = static_cast<DeltaNode *>(curr_node)->GetBase();
+      // }
+      // unsigned short slot = FindLower(static_cast<InnerNode *>(curr_node), x);
+      // curr_pid = static_cast<InnerNode *>(curr_node)->child_pid[slot];
+      curr_pid = FindNextPID(curr_pid, x);
+      curr_node = GetNode(curr_pid);
+    }
+    
+    // check whether the leaf node contains the key, need api
+
+    DeleteNode *delete_delta = AllocateDeleteNoValue(x, curr_node->GetLevel());
+    // SetNode(curr_pid, delete_delta);
+    if (mapping_table.Update(curr_pid, delete_delta, curr_node, -1)) {
+      break;
+    }
+  }
+
   LOG_INFO("delete key is done");
 
 }
@@ -116,27 +166,42 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteData(c
   LOG_INFO("delete data is called");
 
   if (m_root == NULL_PID) {
-    m_root = m_headleaf = m_tailleaf = AllocateLeaf();
-  }
-
-  KeyType key = x.first;
-
-  PID curr_pid = m_root;
-  Node *curr_node = GetNode(m_root);
-
-  while (!curr_node->IsLeaf()) {
-    while (curr_node->IsDelta()) {
-      curr_node = static_cast<DeltaNode *>(curr_node)->GetBase();
+    LeafNode *leaf = AllocateLeaf();
+    PID pid = AllocatePID();
+    m_headleaf = pid;
+    for (;;) {
+      if (mapping_table.Update(pid, leaf, NULL, 0)) {
+        break;
+      }
     }
-    unsigned short slot = FindLower(static_cast<InnerNode *>(curr_node), key);
-    curr_pid = static_cast<InnerNode *>(curr_node)->child_pid[slot];
-    curr_node = GetNode(curr_pid);
+    m_root = m_headleaf = m_tailleaf = pid;
   }
-  
-  // check whether the leaf node contains the key, need api
 
-  DeleteNode *delete_delta = AllocateDeleteWithValue(x, curr_node);
-  SetNode(curr_pid, delete_delta);
+  for (;;) {
+
+    KeyType key = x.first;
+
+    PID curr_pid = m_root;
+    Node *curr_node = GetNode(m_root);
+
+    while (!curr_node->IsLeaf()) {
+      // while (curr_node->IsDelta()) {
+      //   curr_node = static_cast<DeltaNode *>(curr_node)->GetBase();
+      // }
+      // unsigned short slot = FindLower(static_cast<InnerNode *>(curr_node), key);
+      // curr_pid = static_cast<InnerNode *>(curr_node)->child_pid[slot];
+      curr_pid = FindNextPID(curr_pid, key);
+      curr_node = GetNode(curr_pid);
+    }
+    
+    // check whether the leaf node contains the key, need api
+
+    DeleteNode *delete_delta = AllocateDeleteWithValue(x, curr_node->GetLevel());
+    // SetNode(curr_pid, delete_delta);
+    if (mapping_table.Update(curr_pid, delete_delta, curr_node, -1)){
+      break;
+    }
+  }
   LOG_INFO("delete data is done");
 
 }
@@ -144,55 +209,124 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteData(c
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
 void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SplitLeaf(PID pid) {
 
-  Node *n = GetNode(pid);
-  LeafNode *base_node = static_cast<LeafNode *>(GetBaseNode(n));
+  LOG_INFO("split leaf is called on pid = %ld", pid);
+  LeafNode *base_node;
+  KeyType split_key;
+  PID next_leaf_pid;
+  PID parent_pid;
 
-  PID former_next_leaf_pid = static_cast<LeafNode *>(base_node)->GetNext();
-  LeafNode *former_next_leaf = static_cast<LeafNode *>(GetNode(former_next_leaf_pid));
-
-  std::vector<DataPairType> buffer = GetAllData(n);
-
-  // split delta node
-  unsigned short pos = static_cast<unsigned short>(buffer.size()) / 2;
-  KeyType split_key = buffer[pos].first;
-
-  PID next_leaf_pid = AllocateLeaf();
-  LeafNode *next_leaf = static_cast<LeafNode *>(GetNode(next_leaf_pid));
-  for (unsigned short slot = buffer.size() / 2; slot < buffer.size(); slot++) {
-    next_leaf->SetSlot(slot, buffer[slot]);
-  }
-
-  next_leaf->SetNext(former_next_leaf_pid);
-  next_leaf->SetPrev(pid);
-
-  base_node->SetNext(next_leaf_pid);
-  former_next_leaf->SetPrev(next_leaf_pid);
-
-  SplitNode *split_delta = AllocateSplit(split_key, next_leaf_pid, buffer.size() - buffer.size() / 2, n);
-  split_delta->SetBase(n);
-  SetNode(pid, split_delta);
-
-  // separator delta node
 
   // create a inner node for root
   if (m_root == pid) {
-    PID new_root = AllocateInner(1);
+    base_node = static_cast<LeafNode *>(GetBaseNode(GetNode(pid)));
+
+    InnerNode *inner = AllocateInner(1, pid);
+    PID new_root = AllocatePID();
+
     base_node->SetParent(new_root);
+    
+    for (;;) {
+      if (mapping_table.Update(new_root, inner, NULL, 0)) {
+        break;
+      }
+    }
     m_root = new_root;
   }
 
-  PID parent_pid = base_node->GetParent();
-  Node *parent = GetNode(parent_pid);
-  InnerNode *parent_base_node = static_cast<InnerNode *>(GetBaseNode(parent));
-  unsigned short slot = FindLower(parent_base_node, split_key);
-  KeyType right_key;
-  if (slot >= parent_base_node->GetSize())
-    right_key = split_key;
-  else
-    right_key = parent_base_node->slot_key[slot];
-  SeparatorNode *separator_delta = AllocateSeparator(split_key, right_key, next_leaf_pid, parent);
-  separator_delta->SetBase(parent);
-  SetNode(parent_pid, separator_delta);
+  for (;;) {
+    Node *n = GetNode(pid);
+    base_node = static_cast<LeafNode *>(GetBaseNode(n));
+    parent_pid = base_node->GetParent();
+
+    PID former_next_leaf_pid = static_cast<LeafNode *>(base_node)->GetNext();
+    LeafNode *former_next_leaf = NULL;
+    if (former_next_leaf_pid != NULL_PID)
+      former_next_leaf = static_cast<LeafNode *>(GetBaseNode(GetNode(former_next_leaf_pid)));
+
+    std::vector<DataPairType> buffer = GetAllData(n);
+
+    for (int i = 0; i < buffer.size() - 1; i++)
+      for (int j = i + 1; j < buffer.size(); j++) {
+        if (KeyGreaterEqual(buffer[i].first, buffer[j].first)) {
+          LOG_INFO("wrong order: %d %d", i, j);
+        }
+      }
+
+    // split delta node
+    unsigned short pos = static_cast<unsigned short>(buffer.size()) / 2;
+    split_key = buffer[pos].first;
+    LOG_INFO("0 size = %ld, pos = %hu", buffer.size(), pos);
+
+    LOG_INFO("1 pid = %ld", pid);
+
+    LeafNode *next_leaf = AllocateLeaf();
+    next_leaf_pid = AllocatePID();
+    next_leaf->SetParent(parent_pid);
+    for (;;) {
+      if (mapping_table.Update(next_leaf_pid, next_leaf, NULL, 0)) {
+        break;
+      }
+    }
+
+    LOG_INFO("2 new pid = %ld", next_leaf_pid);
+    for (unsigned short slot = buffer.size() / 2; slot < buffer.size(); slot++) {
+      next_leaf->SetSlot(slot - buffer.size() / 2, buffer[slot]);
+    }
+
+    next_leaf->SetNext(former_next_leaf_pid);
+    next_leaf->SetPrev(pid);
+
+    LOG_INFO("3 former_next_leaf_pid = %ld", former_next_leaf_pid);
+    base_node->SetNext(next_leaf_pid);
+
+    LOG_INFO("4");
+    if (former_next_leaf_pid != NULL_PID) {
+      former_next_leaf->SetPrev(next_leaf_pid);
+    }
+
+    LOG_INFO("5");
+
+    SplitNode *split_delta = AllocateSplit(split_key, next_leaf_pid, n->GetLevel());
+    LOG_INFO("6");
+    if (mapping_table.Update(pid, split_delta, n, buffer.size() / 2)) {
+      LOG_INFO("left  size = %ld", split_delta->GetSize());
+      LOG_INFO("right size = %ld", next_leaf->GetSize());
+      break;
+    } else {
+      base_node->SetNext(former_next_leaf_pid);
+      if (former_next_leaf_pid != NULL_PID) {
+        former_next_leaf->SetPrev(pid);
+      }
+      LOG_INFO("split delta failed");
+    }
+  }
+
+  LOG_INFO("split delta is added");
+
+
+
+
+
+  // separator delta node
+  for (;;) {
+    Node *parent = GetNode(parent_pid);
+    KeyType right_key = FindUpperKey(parent_pid, split_key);
+    if (KeyEqual(split_key, right_key)) {
+      LOG_INFO("separator_delta is right most");
+    } else {
+      LOG_INFO("separator_delata is not right most");
+    }
+
+    SeparatorNode *separator_delta = AllocateSeparator(split_key, right_key, next_leaf_pid, parent->GetLevel());
+
+    if (mapping_table.Update(parent_pid, separator_delta, parent, 1)) {
+      break;
+    }
+  }
+
+  LOG_INFO("index entry is added");
+
+  LOG_INFO("split leaf is done");
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
@@ -246,25 +380,27 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
 std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SearchAll() {
   std::vector<DataPairType> result;
-  PID leaf_pid = m_root;
   LOG_INFO("search all is called");
-  if(leaf_pid < 0) {
-    return result;
-  }
 
   // Find the leaf node and retrieve all records in the node
+  PID leaf_pid = m_headleaf;
   Node* leaf = mapping_table.Get(leaf_pid);
-  auto node_data = GetAllData(leaf);
-  LOG_INFO("get_all_data is done");
+  while (leaf_pid != NULL_PID) {
+    LOG_INFO("search for leaf pid = %ld", leaf_pid);
+    if (leaf->IsDelta()) {
+      LOG_INFO("length = %ld", static_cast<DeltaNode *>(leaf)->GetLength());
+    }
+    auto node_data = GetAllData(leaf);
 
-  // Check if we have a match (possible improvement: implement binary search)
-  for (auto it = node_data.begin() ; it != node_data.end(); ++it) {
-    // For duplicate keys, there's an edge case that some records can be placed at the
-    // next node so we need to check the next page as well.
-//    if(it != node_data.end() && (next(it) == node_data.end()) && key_equal(key, it->first)) {
-//      // TODO: handle duplicate keys
-//    }
-    result.push_back(*it);
+    LOG_INFO("search done for leaf pid = %ld, size = %ld", leaf_pid, node_data.size());
+    // Check if we have a match (possible improvement: implement binary search)
+    for (auto it = node_data.begin() ; it != node_data.end(); ++it) {
+      result.push_back(*it);
+    }
+    leaf_pid = static_cast<LeafNode *>(GetBaseNode(leaf))->GetNext();
+    if (leaf_pid != NULL_PID) {
+      leaf = mapping_table.Get(leaf_pid);
+    }
   }
   LOG_INFO("search all is done");
   return result;
@@ -298,6 +434,7 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
 void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::Print() {
   LOG_INFO("bw tree print");
+
 }
 
 
