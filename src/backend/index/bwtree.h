@@ -40,9 +40,7 @@ public:
 
   typedef std::pair<KeyType, ValueType> DataPairType;
   typedef std::pair<KeyType, ValueType> PointerPairType;
-
   typedef std::allocator<std::pair<KeyType, ValueType>> AllocType;
-
 
   enum class NodeType {
     leaf_node,
@@ -68,6 +66,57 @@ public:
   static const unsigned short min_inner_slots = (inner_slot_max / 2);
 
 private:
+
+  // ValueList struct for handling duplicate keys
+  struct ValueList {
+    std::vector<ValueType> value_list;
+
+    // Insert Value to the value list. If the value already exists, we can ignore
+    inline void InsertValue(ValueType value) {
+      if(FindValue(value) != -1) {
+        return;
+      } else {
+        value_list.emplace_back(value);
+      }
+    }
+
+
+    // Return the value at the given index
+    inline ValueType GetValue(int index) {
+      return value_list.at(index);
+    }
+
+    // Remove the value
+    inline void RemoveValue(ValueType value) {
+      int index = FindValue(value);
+      if(index == -1) {
+        return;
+      } else {
+        value_list.erase(value_list.begin() + index);
+      }
+    }
+
+    // Find the index of value ( -1 indicates not exist)
+    inline int FindValue(ValueType value) {
+      int index = 0;
+      for (auto it = value_list.begin() ; it != value_list.end(); ++it) {
+        if(it->block == value.block && it->offset == value.offset) {
+          return index;
+        }
+        index ++;
+      }
+      return -1;
+    }
+
+    inline int GetSize() {
+      return value_list.size();
+    }
+
+//    ~ValueList() {
+//      delete value_list;
+//    }
+  };
+
   // *** Node Classes for In-Memory Nodes
 
   /// The header structure of each node in memory. This structure is extended
@@ -171,7 +220,7 @@ private:
 
     KeyType slot_key[leaf_slot_max];
 
-    ValueType slot_data[leaf_slot_max];
+    ValueList slot_data[leaf_slot_max];
 
     inline void Initialize() {
       Node::Initialize(NodeType::leaf_node, 0, 0);
@@ -182,7 +231,7 @@ private:
       if (slot >= Node::GetSize())
           Node::AddSlotUse();
       slot_key[slot] = pair.first;
-      slot_data[slot] = pair.second;
+      slot_data[slot].InsertValue(pair.second);
     }
 
     inline PID GetPrev() const {
@@ -319,6 +368,10 @@ private:
     inline KeyType GetKey() const {
       return split_key;
     }
+
+    inline PID GetSide() const {
+      return side;
+    }
   };
 
   /// Extended structure of a delta node in memory. Contains a key range
@@ -391,12 +444,11 @@ private:
     }
 
     // This will be changed if we will not use array
-    inline bool ContainsValue(PID key) {
-      if (table[key] == 0) {
-        return false;
-      } else {
+    inline bool ContainsKey(PID key) {
+      if(table[key]){
         return true;
       }
+      return false;
     }
 
     ~MappingTable(){
@@ -593,46 +645,75 @@ private:
   /// and value objects & frees delta nodes
   inline void FreeNode(Node *n)
   {
-    if (n->IsLeaf()) {
-      LeafNode *ln = static_cast<LeafNode*>(n);
-      typename LeafNode::alloc_type a(LeafNodeAllocator());
-      a.destroy(ln);
-      a.deallocate(ln, 1);
-    }
-    else if(n->IsDelta()) {
-      if(n->GetType() == NodeType::delete_node) {
+    switch (n->GetType()) {
+      case NodeType::leaf_node:
+        {
+          LeafNode *ln = static_cast<LeafNode *>(n);
+          typename LeafNode::alloc_type a(LeafNodeAllocator());
+          a.destroy(ln);
+          a.deallocate(ln, 1);
+        }
+        break;
+      case NodeType::inner_node: {
+        InnerNode *inner = static_cast<InnerNode *>(n);
+        typename InnerNode::alloc_type a(InnerNodeAllocator());
+        a.destroy(inner);
+        a.deallocate(inner, 1);
+      }
+        break;
+      case NodeType::insert_node: {
+        InsertNode *ins = static_cast<InsertNode *>(n);
+        typename InsertNode::alloc_type a(InsertNodeAllocator());
+        a.destroy(ins);
+        a.deallocate(ins, 1);
+      }
+        break;
+      case NodeType::delete_node: {
         DeleteNode *del = static_cast<DeleteNode *>(n);
         typename DeleteNode::alloc_type a(DeleteNodeAllocator());
         a.destroy(del);
         a.deallocate(del, 1);
       }
-      else if(n->GetType() == NodeType::insert_node) {
-        InsertNode *ins = static_cast<InsertNode*>(n);
-        typename InsertNode::alloc_type a(InsertNodeAllocator());
-        a.destroy(ins);
-        a.deallocate(ins,1);
+        break;
+      case NodeType::update_node:
+        break;
+      case NodeType::split_node: {
+        SplitNode *split = static_cast<SplitNode *>(n);
+        typename SplitNode::alloc_type a(DeleteNodeAllocator());
+        // if(mapping_table.ContainsKey(split->side)) {
+        //   ClearRecursive(split->side);
+        // }
+        a.destroy(split);
+        a.deallocate(split, 1);
       }
-    }
-    else {
-      InnerNode *inner = static_cast<InnerNode*>(n);
-      typename InnerNode::alloc_type a(InnerNodeAllocator());
-      a.destroy(inner);
-      a.deallocate(inner, 1);
+        break;
+      case NodeType::separator_node: {
+        SeparatorNode *sep = static_cast<SeparatorNode *>(n);
+        typename SeparatorNode::alloc_type a(DeleteNodeAllocator());
+        if(mapping_table.ContainsKey(sep->child)) {
+          ClearRecursive(sep->child);
+        }
+        a.destroy(sep);
+        a.deallocate(sep, 1);
+      }
+        break;
     }
   }
 
 public:
   void Clear() {
-    if(m_root) {
+    if(m_root != NULL_PID) {
       ClearRecursive(m_root);
     }
-
   }
 
 
 private:
 
   void ClearRecursive(PID pid) {
+    if(!mapping_table.ContainsKey(pid)) {
+      return;
+    }
     Node* node = mapping_table.Get(pid);
     while(node->IsDelta()) {
       Node* prev= node;
@@ -640,19 +721,19 @@ private:
       FreeNode(prev);
     }
 
-    if(node->IsLeaf()) {
+    if(node->GetType() == NodeType::leaf_node) {
       LeafNode* leaf_node = static_cast<LeafNode*>(node);
       FreeNode(leaf_node);
 
-    } else {
+    } else if (node->GetType() == NodeType::inner_node) {
       InnerNode* inner_node = static_cast<InnerNode *>(node);
       for (unsigned short slot = 0; slot < inner_node->slot_use + 1; ++slot)
       {
         ClearRecursive(inner_node->child_pid[slot]);
-        FreeNode(inner_node);
       }
-
+      FreeNode(inner_node);
     }
+    mapping_table.Remove(pid);
   }
 
   inline PID AllocatePID() {
@@ -814,7 +895,10 @@ private:
       result.push_back(inserted[i]);
 
     for (unsigned short slot = 0; slot < n->GetSize(); slot++) {
-      result.push_back(std::make_pair(static_cast<LeafNode *>(n)->slot_key[slot], static_cast<LeafNode *>(n)->slot_data[slot]));
+      auto value_list = static_cast<LeafNode *>(n)->slot_data[slot];
+      for(int i = 0; i < value_list.GetSize(); i ++) {
+        result.push_back(std::make_pair(static_cast<LeafNode *>(n)->slot_key[slot], value_list.GetValue(i)));
+      }
     }
 
     if (result.size() == 0) {
@@ -834,7 +918,7 @@ private:
   }
 
   // Helper function for checking if the key is in the vector.
-  inline bool VectorContainsKey(std::vector<DataPairType> data, const KeyType &key) const {
+  inline bool VectorContainsKey(std::vector<DataPairType> & data, const KeyType &key) const {
     for (auto it = data.begin() ; it != data.end(); ++it) {
       if(KeyEqual(key, it->first)) {
         return true;
@@ -845,7 +929,7 @@ private:
 
 
   // Helper function for checking if the data is in the vector.
-  inline bool VectorContainsData(std::vector<DataPairType> data, const DataPairType &pair) const {
+  inline bool VectorContainsData(std::vector<DataPairType> & data, const DataPairType &pair) const {
     KeyType key = pair.first;
     ValueType value = pair.second;
     for (auto it = data.begin() ; it != data.end(); ++it) {
@@ -860,7 +944,7 @@ private:
   }
 
   // Helper function for checking if the key is in the vector.
-  inline bool KeyVectorContainsKey(std::vector<KeyType> keys, KeyType &key) const {
+  inline bool KeyVectorContainsKey(std::vector<KeyType> & keys, const KeyType &key) const {
     for (auto it = keys.begin() ; it != keys.end(); ++it) {
       if(KeyEqual(key, *it)) {
         return true;
