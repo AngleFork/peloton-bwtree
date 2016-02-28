@@ -680,9 +680,9 @@ private:
       case NodeType::split_node: {
         SplitNode *split = static_cast<SplitNode *>(n);
         typename SplitNode::alloc_type a(DeleteNodeAllocator());
-        if(mapping_table.ContainsKey(split->side)) {
-          ClearRecursive(split->side);
-        }
+        // if(mapping_table.ContainsKey(split->side)) {
+        //   ClearRecursive(split->side);
+        // }
         a.destroy(split);
         a.deallocate(split, 1);
       }
@@ -702,7 +702,7 @@ private:
 
 public:
   void Clear() {
-    if(m_root) {
+    if(m_root != NULL_PID) {
       ClearRecursive(m_root);
     }
   }
@@ -721,17 +721,17 @@ private:
       FreeNode(prev);
     }
 
-    if(node->IsLeaf()) {
+    if(node->GetType() == NodeType::leaf_node) {
       LeafNode* leaf_node = static_cast<LeafNode*>(node);
       FreeNode(leaf_node);
 
-    } else {
+    } else if (node->GetType() == NodeType::inner_node) {
       InnerNode* inner_node = static_cast<InnerNode *>(node);
       for (unsigned short slot = 0; slot < inner_node->slot_use + 1; ++slot)
       {
         ClearRecursive(inner_node->child_pid[slot]);
-        FreeNode(inner_node);
       }
+      FreeNode(inner_node);
     }
     mapping_table.Remove(pid);
   }
