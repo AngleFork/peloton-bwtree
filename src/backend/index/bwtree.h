@@ -69,21 +69,21 @@ private:
 
   // ValueList struct for handling duplicate keys
   struct ValueList {
-    std::vector<ValueType>* value_list = new std::vector<ValueType>();
+    std::vector<ValueType> value_list;
 
     // Insert Value to the value list. If the value already exists, we can ignore
     inline void InsertValue(ValueType value) {
       if(FindValue(value) != -1) {
         return;
       } else {
-        value_list->emplace_back(value);
+        value_list.emplace_back(value);
       }
     }
 
 
     // Return the value at the given index
     inline ValueType GetValue(int index) {
-      return value_list->at(index);
+      return value_list.at(index);
     }
 
     // Remove the value
@@ -92,14 +92,14 @@ private:
       if(index == -1) {
         return;
       } else {
-        value_list->erase(value_list->begin() + index);
+        value_list.erase(value_list.begin() + index);
       }
     }
 
     // Find the index of value ( -1 indicates not exist)
     inline int FindValue(ValueType value) {
       int index = 0;
-      for (auto it = value_list->begin() ; it != value_list->end(); ++it) {
+      for (auto it = value_list.begin() ; it != value_list.end(); ++it) {
         if(it->block == value.block && it->offset == value.offset) {
           return index;
         }
@@ -109,12 +109,12 @@ private:
     }
 
     inline int GetSize() {
-      return value_list->size();
+      return value_list.size();
     }
 
-    ~ValueList() {
-      delete value_list;
-    }
+//    ~ValueList() {
+//      delete value_list;
+//    }
   };
 
   // *** Node Classes for In-Memory Nodes
