@@ -63,6 +63,8 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::InsertData(_
     if (mapping_table.Update(curr_pid, insert_delta, curr_node, (contain) ? 0 : 1)) {
       LOG_INFO(" node size = %ld", insert_delta->GetSize());
       break;
+    } else {
+      FreeNode(insert_delta);
     }
   }
   LOG_INFO("insert is done on pid = %ld", curr_pid);
@@ -112,6 +114,8 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::UpdateData(c
     // SetNode(curr_pid, update_delta);
     if (mapping_table.Update(curr_pid, update_delta, curr_node, 0)) {
       break;
+    } else {
+      FreeNode(update_delta);
     }
   }
 
@@ -158,6 +162,8 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteKey(co
     // SetNode(curr_pid, delete_delta);
     if (mapping_table.Update(curr_pid, delete_delta, curr_node, -1)) {
       break;
+    } else {
+      FreeNode(delete_delta);
     }
   }
 
@@ -206,6 +212,8 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteData(c
     // SetNode(curr_pid, delete_delta);
     if (mapping_table.Update(curr_pid, delete_delta, curr_node, 0)){
       break;
+    } else {
+      FreeNode(delete_delta);
     }
   }
   LOG_INFO("delete data is done");
@@ -245,7 +253,7 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SplitLeaf(PI
     if (!n->IsFull()) {
       return;
     }
-    
+
     base_node = static_cast<LeafNode *>(GetBaseNode(n));
     parent_pid = base_node->GetParent();
 
@@ -328,6 +336,8 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SplitLeaf(PI
       LOG_INFO("right size = %ld", next_leaf->GetSize());
       break;
     } else {
+      FreeNode(next_leaf);
+      FreeNode(split_delta);
       // base_node->SetNext(former_next_leaf_pid);
       // if (former_next_leaf_pid != NULL_PID) {
       //   former_next_leaf->SetPrev(pid);
@@ -356,6 +366,8 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SplitLeaf(PI
 
     if (mapping_table.Update(parent_pid, separator_delta, parent, 1)) {
       break;
+    } else {
+      FreeNode(separator_delta);
     }
   }
 
@@ -368,7 +380,7 @@ template <typename KeyType, typename ValueType, typename KeyComparator, typename
 bool BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::Exists(const KeyType &key) {
   PID leaf_pid = GetLeafNodePID(key);
 
-  if(leaf_pid < 0) {
+  if (leaf_pid < 0) {
     return false;
   }
 
