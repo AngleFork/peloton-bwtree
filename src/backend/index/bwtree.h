@@ -398,6 +398,23 @@ private:
     }
   };
 
+  struct EpochTable{
+    std::vector<Node*> table;
+
+    inline void RegisterNode(Node* node) {
+      table.push_back(node);
+    }
+
+    inline Node* GetNode(int i) {
+      return table.at(i);
+    }
+
+    inline int GetSize() {
+      return table.size();
+    }
+  };
+
+
   struct MappingTable {
 
     Node** table = new Node*[MAPPING_TABLE_SIZE]();
@@ -484,6 +501,9 @@ private:
 
   /// Atomic counter for PID allocation
   std::atomic<int> pid_counter;
+
+  /// Epoch table
+  EpochTable epoch_table;
 
 public:
 
@@ -708,6 +728,10 @@ public:
   void Clear() {
     if(m_root != NULL_PID) {
       ClearRecursive(m_root);
+    }
+
+    for(int i = 0; i < epoch_table.GetSize(); i++) {
+      FreeNode(epoch_table.GetNode(i));
     }
   }
 

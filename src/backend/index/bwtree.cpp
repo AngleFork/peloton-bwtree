@@ -548,7 +548,7 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::ConsolidateL
     consolidated->level = node->level;
 
     // Get the base node
-    while(node->IsDelta()) {
+    if(node->IsDelta()) {
       node = static_cast<DeltaNode *>(node)->GetBase();
     }
 
@@ -576,6 +576,8 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::ConsolidateL
     if(mapping_table.Update(pid, consolidated, old, 0)){
       break;
     }
+
+    epoch_table.RegisterNode(old);
   }
 }
 
