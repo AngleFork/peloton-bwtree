@@ -25,7 +25,7 @@
 
 #define BWTREE_MAX(a,b) ((a) < (b) ? (b) : (a))
 #define BWTREE_NODE_SIZE 256
-#define MAPPING_TABLE_SIZE 4194304
+#define MAPPING_TABLE_SIZE 4096
 
 namespace peloton {
 namespace index {
@@ -1076,6 +1076,8 @@ private:
   // Split/ Merge are internal
   void SplitLeaf(PID pid);
 
+  void ConsolidateNode(PID pid);
+
 public:
   // BW Tree API
   void InsertData(const DataPairType &x);
@@ -1085,7 +1087,7 @@ public:
   bool Exists(const KeyType &key);
   std::vector<DataPairType> Search(const KeyType &key);
   std::vector<DataPairType> SearchAll();
-  std::vector<DataPairType> SearchRange(const KeyType &low_key, const KeyType &high_key);
+  std::vector<DataPairType> Scan();
 
 
 public:

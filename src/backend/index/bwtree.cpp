@@ -464,35 +464,41 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
   return result;
 }
 
-template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
-std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SearchRange(const KeyType &low, const KeyType &high) {
-  std::vector<DataPairType> result;
-  PID low_pid = GetLeafNodePID(low);
-  PID high_pid = GetLeafNodePID(high);
+//template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
+//std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SearchRange(const KeyType &low, const KeyType &high) {
+//  std::vector<DataPairType> result;
+//  PID low_pid = GetLeafNodePID(low);
+//  PID high_pid = GetLeafNodePID(high);
+//
+//  if(low_pid < 0 || high_pid < 0) {
+//    return result;
+//  }
+//
+//  // Case 1. low not exists  (e.g where x < 5)
+//
+//  // Case 2. high not exists (e.g where x > 5)
+//
+//  // Case 3. low & high both exist (e.g where x > 5 and x < 10)
+//
+//  // const leaf_node* low_node = static_cast<const leaf_node*>(mapping_table.get(low_pid));
+//  // const leaf_node* high_node = static_cast<const leaf_node*>(mapping_table.get(high_pid));
+//  // PID current_pid = low_pid;
+//
+//  return result;
+//
+//}
 
-  if(low_pid < 0 || high_pid < 0) {
-    return result;
-  }
 
-  // Case 1. low not exists  (e.g where x < 5)
-
-  // Case 2. high not exists (e.g where x > 5)
-
-  // Case 3. low & high both exist (e.g where x > 5 and x < 10)
-
-  // const leaf_node* low_node = static_cast<const leaf_node*>(mapping_table.get(low_pid));
-  // const leaf_node* high_node = static_cast<const leaf_node*>(mapping_table.get(high_pid));
-  // PID current_pid = low_pid;
-
-  return result;
-
-}
+//template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
+//std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::ConsolidateNode(
+//  PID pid) {
+//
+//}
 
 // Debug Purpose
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
 void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::Print() {
   LOG_INFO("bw tree print");
-
 }
 
 

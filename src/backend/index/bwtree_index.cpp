@@ -66,7 +66,17 @@ BWTreeIndex<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::Scan(
     __attribute__((unused)) const std::vector<ExpressionType> &expr_types,
     __attribute__((unused)) const ScanDirectionType& scan_direction) {
   std::vector<ItemPointer> result;
-  // Add your implementation here
+
+  auto entries = container.SearchAll();
+  for (auto entry = entries.begin(); entry != entries.end(); ++entry) {
+    auto key = entry->first;
+    auto tuple = key.GetTupleForComparison(metadata->GetKeySchema());
+
+    if(Compare(tuple, key_column_ids, expr_types, values) == true) {
+      result.push_back(entry->second);
+    }
+  }
+
   return result;
 }
 
