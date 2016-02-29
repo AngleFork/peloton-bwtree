@@ -56,10 +56,12 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::InsertData(_
     }
 
     // check whether the leaf node contains the key, need api
+    bool contain = LeafContainsKey(curr_node, x.first);
 
     insert_delta = AllocateInsert(x, curr_node->GetLevel());
     // SetNode(curr_pid, insert_delta);
-    if (mapping_table.Update(curr_pid, insert_delta, curr_node, 1)) {
+    if (mapping_table.Update(curr_pid, insert_delta, curr_node, (contain) ? 0 : 1)) {
+      LOG_INFO(" node size = %ld", insert_delta->GetSize());
       break;
     }
   }
@@ -147,6 +149,10 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteKey(co
     }
     
     // check whether the leaf node contains the key, need api
+    bool contain = LeafContainsKey(curr_node, x);
+    if (!contain) {
+      break;
+    }
 
     DeleteNode *delete_delta = AllocateDeleteNoValue(x, curr_node->GetLevel());
     // SetNode(curr_pid, delete_delta);
@@ -198,7 +204,7 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteData(c
 
     DeleteNode *delete_delta = AllocateDeleteWithValue(x, curr_node->GetLevel());
     // SetNode(curr_pid, delete_delta);
-    if (mapping_table.Update(curr_pid, delete_delta, curr_node, -1)){
+    if (mapping_table.Update(curr_pid, delete_delta, curr_node, 0)){
       break;
     }
   }
@@ -234,7 +240,12 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SplitLeaf(PI
   }
 
   for (;;) {
+
     Node *n = GetNode(pid);
+    if (!n->IsFull()) {
+      return;
+    }
+    
     base_node = static_cast<LeafNode *>(GetBaseNode(n));
     parent_pid = base_node->GetParent();
 
@@ -243,14 +254,25 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SplitLeaf(PI
     if (former_next_leaf_pid != NULL_PID)
       former_next_leaf = static_cast<LeafNode *>(GetBaseNode(GetNode(former_next_leaf_pid)));
 
-    std::vector<DataPairType> buffer = GetAllData(n);
+    std::vector<DataPairListType> buffer = GetAllData(n);
 
-    for (int i = 0; i < buffer.size() - 1; i++)
+    std::vector<DataPairType> result;
+    for (auto it = buffer.begin() ; it != buffer.end(); ++it) {
+      LOG_INFO(" key length = %d", it->second.GetSize());
+      for (int i = 0; i < it->second.GetSize(); i++) {
+        result.push_back(std::make_pair(it->first, it->second.GetValue(i)));
+      }
+    }
+    LOG_INFO("result length = %ld", result.size());
+
+
+    for (int i = 0; i < buffer.size() - 1; i++) {
       for (int j = i + 1; j < buffer.size(); j++) {
         if (KeyGreaterEqual(buffer[i].first, buffer[j].first)) {
           LOG_INFO("wrong order: %d %d", i, j);
         }
       }
+    }
 
     // split delta node
     unsigned short pos = static_cast<unsigned short>(buffer.size()) / 2;
@@ -273,30 +295,43 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SplitLeaf(PI
       next_leaf->SetSlot(slot - buffer.size() / 2, buffer[slot]);
     }
 
-    next_leaf->SetNext(former_next_leaf_pid);
-    next_leaf->SetPrev(pid);
+    // next_leaf->SetNext(former_next_leaf_pid);
+    // next_leaf->SetPrev(pid);
 
-    LOG_INFO("3 former_next_leaf_pid = %ld", former_next_leaf_pid);
-    base_node->SetNext(next_leaf_pid);
+    // LOG_INFO("3 former_next_leaf_pid = %ld", former_next_leaf_pid);
+    // base_node->SetNext(next_leaf_pid);
 
-    LOG_INFO("4");
-    if (former_next_leaf_pid != NULL_PID) {
-      former_next_leaf->SetPrev(next_leaf_pid);
-    }
+    // LOG_INFO("4");
+    // if (former_next_leaf_pid != NULL_PID) {
+    //   former_next_leaf->SetPrev(next_leaf_pid);
+    // }
 
     LOG_INFO("5");
 
     SplitNode *split_delta = AllocateSplit(split_key, next_leaf_pid, n->GetLevel());
     LOG_INFO("6");
     if (mapping_table.Update(pid, split_delta, n, buffer.size() / 2)) {
+
+
+      next_leaf->SetNext(former_next_leaf_pid);
+      next_leaf->SetPrev(pid);
+
+      LOG_INFO("3 former_next_leaf_pid = %ld", former_next_leaf_pid);
+      base_node->SetNext(next_leaf_pid);
+
+      LOG_INFO("4");
+      if (former_next_leaf_pid != NULL_PID) {
+        former_next_leaf->SetPrev(next_leaf_pid);
+      }
+
       LOG_INFO("left  size = %ld", split_delta->GetSize());
       LOG_INFO("right size = %ld", next_leaf->GetSize());
       break;
     } else {
-      base_node->SetNext(former_next_leaf_pid);
-      if (former_next_leaf_pid != NULL_PID) {
-        former_next_leaf->SetPrev(pid);
-      }
+      // base_node->SetNext(former_next_leaf_pid);
+      // if (former_next_leaf_pid != NULL_PID) {
+      //   former_next_leaf->SetPrev(pid);
+      // }
       LOG_INFO("split delta failed");
     }
   }
@@ -341,9 +376,9 @@ bool BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::Exists(const
 
   // Traversing delta chain here will be more efficient since we dont have to loop till base for some cases.
   // But for simplicity, we call get_all_data() and check if the key is in the returned vector.
-  std::vector<DataPairType> node_data = GetAllData(leaf);
+  std::vector<DataPairListType> node_data = GetAllData(leaf);
 
-  return VectorContainsKey(node_data, key);
+  return VectorContainsKey2(node_data, key);
 }
 
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
@@ -369,7 +404,10 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
 //    }
     if(KeyEqual(key, it->first)) {
       LOG_INFO("key match found");
-      result.push_back(*it);
+
+      for (int i = 0; i < it->second.GetSize(); i++) {
+        result.push_back(std::make_pair(it->first, it->second.GetValue(i)));
+      }
     }
   }
   LOG_INFO("search is done");
@@ -390,13 +428,21 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
     if (leaf->IsDelta()) {
       LOG_INFO("length = %ld", static_cast<DeltaNode *>(leaf)->GetLength());
     }
+    LOG_INFO("node size = %ld", leaf->GetSize());
     auto node_data = GetAllData(leaf);
 
     LOG_INFO("search done for leaf pid = %ld, size = %ld", leaf_pid, node_data.size());
     // Check if we have a match (possible improvement: implement binary search)
     for (auto it = node_data.begin() ; it != node_data.end(); ++it) {
-      result.push_back(*it);
+      LOG_INFO(" key length = %d", it->second.GetSize());
+      for (int i = 0; i < it->second.GetSize(); i++) {
+        result.push_back(std::make_pair(it->first, it->second.GetValue(i)));
+      }
+      // result.push_back(*it);
     }
+
+    LOG_INFO("result length = %ld", result.size());
+
     leaf_pid = static_cast<LeafNode *>(GetBaseNode(leaf))->GetNext();
     if (leaf_pid != NULL_PID) {
       leaf = mapping_table.Get(leaf_pid);

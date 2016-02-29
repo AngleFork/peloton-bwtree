@@ -73,11 +73,11 @@ private:
 
     // Insert Value to the value list. If the value already exists, we can ignore
     inline void InsertValue(ValueType value) {
-      if(FindValue(value) != -1) {
-        return;
-      } else {
+      // if(FindValue(value) != -1) {
+      //   return;
+      // } else {
         value_list.emplace_back(value);
-      }
+      // }
     }
 
 
@@ -116,6 +116,9 @@ private:
 //      delete value_list;
 //    }
   };
+
+
+  typedef std::pair<KeyType, ValueList> DataPairListType;
 
   // *** Node Classes for In-Memory Nodes
 
@@ -227,11 +230,11 @@ private:
       prev_leaf = next_leaf = NULL_PID;
     }
 
-    inline void SetSlot(unsigned short slot, const DataPairType &pair) {
+    inline void SetSlot(unsigned short slot, const DataPairListType &pair) {
       if (slot >= Node::GetSize())
           Node::AddSlotUse();
       slot_key[slot] = pair.first;
-      slot_data[slot].InsertValue(pair.second);
+      slot_data[slot] = pair.second;
     }
 
     inline PID GetPrev() const {
@@ -785,15 +788,15 @@ private:
       }
       node = static_cast<DeltaNode *>(node)->GetBase();
     }
-    // InnerNode *inner = static_cast<InnerNode *>(node);
-    // for (unsigned short lo = 0; lo < inner->slot_use; lo++) {
-    //   if (KeyLess(key, inner->slot_key[lo])) {
-    //     if (KeyEqual(key, upper_key) || KeyLess(inner->slot_key[lo], upper_key)) {
-    //       upper_key = inner->slot_key[lo];
-    //     }
-    //     break;
-    //   }
-    // }
+    InnerNode *inner = static_cast<InnerNode *>(node);
+    for (unsigned short lo = 0; lo < inner->slot_use; lo++) {
+      if (KeyLess(key, inner->slot_key[lo])) {
+        if (KeyEqual(key, upper_key) || KeyLess(inner->slot_key[lo], upper_key)) {
+          upper_key = inner->slot_key[lo];
+        }
+        break;
+      }
+    }
     return upper_key;
   }
 
@@ -830,6 +833,41 @@ private:
     return inner->child_pid[lo];
   }
 
+  inline bool LeafContainsKey(Node *node, const KeyType &key) {
+    while (node->IsDelta()) {
+      switch (node->GetType()) {
+        case NodeType::leaf_node:
+          break;
+        case NodeType::inner_node:
+          break;
+        case NodeType::insert_node:
+          if (KeyEqual(key, static_cast<InsertNode *>(node)->insert_key)) {
+            return true;
+          }
+          break;
+        case NodeType::delete_node:
+          if (KeyEqual(key, static_cast<DeleteNode *>(node)->GetKey())) {
+            return false;
+          }
+          break;
+        case NodeType::update_node:
+          break;
+        case NodeType::split_node:
+          break;
+        case NodeType::separator_node:
+          break;
+      }
+      node = static_cast<DeltaNode *>(node)->GetBase();
+    }
+    LeafNode *leaf = static_cast<LeafNode *>(node);
+    for (unsigned short slot = 0; slot < leaf->GetSize(); slot++) {
+      if (KeyEqual(key, leaf->slot_key[slot])) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   inline Node *GetBaseNode(Node *n) const {
     while (n->IsDelta()) {
       n = static_cast<DeltaNode *>(n)->GetBase();
@@ -837,7 +875,7 @@ private:
     return n;
   }
 
-  inline std::vector<DataPairType> GetAllData(Node *n) {
+  inline std::vector<DataPairListType> GetAllData(Node *n) {
     std::vector<DataPairType> inserted;
     std::vector<DataPairType> deleted;
     std::vector<KeyType> deleted_key;
@@ -889,18 +927,41 @@ private:
       }
       n = static_cast<DeltaNode *>(n)->GetBase();
     }
+    std::vector<DataPairListType> result;
 
-    std::vector<DataPairType> result;
-    for (int i = 0; i < inserted.size(); i++)
-      result.push_back(inserted[i]);
 
-    for (unsigned short slot = 0; slot < n->GetSize(); slot++) {
-      auto value_list = static_cast<LeafNode *>(n)->slot_data[slot];
-      for(int i = 0; i < value_list.GetSize(); i ++) {
-        result.push_back(std::make_pair(static_cast<LeafNode *>(n)->slot_key[slot], value_list.GetValue(i)));
+    LeafNode *leaf = static_cast<LeafNode *>(n);
+    for (unsigned short slot = 0; slot < leaf->GetSize(); slot++) {
+      if ((!has_split || KeyLess(leaf->slot_key[slot], split_key))
+          && !KeyVectorContainsKey(deleted_key, leaf->slot_key[slot])) {
+        result.push_back(std::make_pair(leaf->slot_key[slot], leaf->slot_data[slot]));
       }
     }
 
+    for (int i = 0; i < deleted.size(); i++) {
+      for (int j = 0; j < result.size(); j++) {
+        if (KeyEqual(deleted[i].first, result[j].first)) {
+          result[j].second.RemoveValue(deleted[i].second);
+        }
+      }
+    }
+
+
+    for (int i = 0; i < inserted.size(); i++) {
+      bool match = false;
+      for (int j = 0; j < result.size(); j++) {
+        if (KeyEqual(inserted[i].first, result[j].first)) {
+          match = true;
+          result[j].second.InsertValue(inserted[i].second);
+          break;
+        }
+      }
+      if (!match) {
+        ValueList value_list;
+        value_list.InsertValue(inserted[i].second);
+        result.push_back(std::make_pair(inserted[i].first, value_list));
+      }
+    }
     if (result.size() == 0) {
       return result;
     }
@@ -909,7 +970,7 @@ private:
     for (int i = 0; i < result.size() - 1; i++)
       for (int j = i + 1; j < result.size(); j++) {
         if (KeyGreater(result[i].first, result[j].first)) {
-          DataPairType tmp = result[i];
+          DataPairListType tmp = result[i];
           result[i] = result[j];
           result[j] = tmp;
         }
@@ -919,6 +980,17 @@ private:
 
   // Helper function for checking if the key is in the vector.
   inline bool VectorContainsKey(std::vector<DataPairType> & data, const KeyType &key) const {
+    for (auto it = data.begin() ; it != data.end(); ++it) {
+      if(KeyEqual(key, it->first)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+
+  // Helper function for checking if the key is in the vector.
+  inline bool VectorContainsKey2(std::vector<DataPairListType> & data, const KeyType &key) const {
     for (auto it = data.begin() ; it != data.end(); ++it) {
       if(KeyEqual(key, it->first)) {
         return true;
