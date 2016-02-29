@@ -398,12 +398,19 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
   std::vector<DataPairType> result;
   PID leaf_pid = GetLeafNodePID(key);
   LOG_INFO("search is called");
-  if(leaf_pid < 0) {
+  if(leaf_pid == NULL_PID) {
     return result;
   }
 
   // Find the leaf node and retrieve all records in the node
   Node* leaf = mapping_table.Get(leaf_pid);
+  if(leaf->IsDelta()) {
+    size_t delta_length = static_cast<DeltaNode*>(leaf)->GetLength();
+    if(delta_length > DELTA_THRESHOLD) {
+      ConsolidateLeafNode(leaf_pid);
+    }
+  }
+
   auto node_data = GetAllData(leaf);
   LOG_INFO("get_all_data is done");
 
@@ -490,10 +497,87 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
 
 
 //template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
-//std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::ConsolidateNode(
+//void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::ConsolidateInnerNode(
 //  PID pid) {
 //
+//  // This node must be delta node since we are calling consolidation when the threshold for delta length exceeds
+//  Node* node = mapping_table.Get(pid);
+//
+//  NodeType type = node->GetType();
+//
+//  unsigned short level;
+//  PID child;
+//
+//  InnerNode* inner = AllocateInner(level, child);
+//
+//  switch(node->GetType()) {
+//    case NodeType::separator_node:
+//    case NodeType::split_node:
+//      break;
+//  }
+//
+//
+//
+//  inner->child_pid
+//  inner->level
+//  inner->parent
+//  inner->slot_key
+//  inner->slot_use
+//
 //}
+
+
+
+template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
+void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::ConsolidateLeafNode(
+  PID pid) {
+  for(;;) {
+    LOG_INFO("CONSOLIDATION STARTS!");
+
+    // This node must be delta node since we are calling consolidation when the threshold for delta length exceeds
+    Node* old = mapping_table.Get(pid);
+
+    Node* node = old;
+    LeafNode* consolidated = AllocateLeaf();
+
+    consolidated->next_leaf = NULL_PID;
+    consolidated->prev_leaf = NULL_PID;
+
+    // Set parent, level information
+    consolidated->parent = node->parent;
+    consolidated->level = node->level;
+
+    // Get the base node
+    while(node->IsDelta()) {
+      node = static_cast<DeltaNode *>(node)->GetBase();
+    }
+
+    consolidated->next_leaf = static_cast<LeafNode*>(node)->next_leaf;
+    consolidated->prev_leaf = static_cast<LeafNode*>(node)->prev_leaf;
+
+    // Set the key slot, data.
+    auto data = GetAllData(node);
+    consolidated->slot_use = data.size();
+
+    int index = 0;
+    for (auto it = data.begin() ; it != data.end(); ++it) {
+      consolidated->slot_key[index] = it->first;
+      for(int i = 0; i < it->second.GetSize(); i++) {
+        consolidated->slot_data[index].InsertValue(it->second.GetValue(i));
+      }
+
+//      consolidated->slot_data[index] = it->second;
+      index++;
+    }
+
+    LOG_INFO("consolidated node next_leaf(%ld), prev_leaf(%ld), parent(%ld)", consolidated->next_leaf, consolidated->prev_leaf, consolidated->parent);
+
+    // Check if there was any change in the mapping table while consolidating
+    if(mapping_table.Update(pid, consolidated, old, 0)){
+      break;
+    }
+  }
+}
 
 // Debug Purpose
 template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
