@@ -562,11 +562,7 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::ConsolidateL
     int index = 0;
     for (auto it = data.begin() ; it != data.end(); ++it) {
       consolidated->slot_key[index] = it->first;
-      for(int i = 0; i < it->second.GetSize(); i++) {
-        consolidated->slot_data[index].InsertValue(it->second.GetValue(i));
-      }
-
-//      consolidated->slot_data[index] = it->second;
+      consolidated->slot_data[index] = it->second;
       index++;
     }
 
@@ -574,10 +570,9 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::ConsolidateL
 
     // Check if there was any change in the mapping table while consolidating
     if(mapping_table.Update(pid, consolidated, old, 0)){
+      epoch_table.RegisterNode(old);
       break;
     }
-
-    epoch_table.RegisterNode(old);
   }
 }
 
