@@ -39,7 +39,7 @@ public:
   typedef size_t PID;
 
   typedef std::pair<KeyType, ValueType> DataPairType;
-  typedef std::pair<KeyType, ValueType> PointerPairType;
+  typedef std::pair<KeyType, PID> PointerPairType;
   typedef std::allocator<std::pair<KeyType, ValueType>> AllocType;
 
   enum class NodeType {
@@ -146,16 +146,28 @@ private:
       return (node_type != NodeType::leaf_node && node_type != NodeType::inner_node);
     }
 
-    inline bool IsFull() const {
-      return (slot_use == leaf_slot_max);
+    inline bool IsLeafFull() const {
+      return (slot_use >= leaf_slot_max);
     }
 
-    inline bool IsFew() const {
+    inline bool IsLeafFew() const {
       return (slot_use <= min_leaf_slots);
     }
 
-    inline bool IsUnderflow() const {
+    inline bool IsLeafUnderflow() const {
       return (slot_use < min_leaf_slots);
+    }
+
+    inline bool IsInnerFull() const {
+      return (slot_use + 1 >= inner_slot_max);
+    }
+
+    inline bool IsInnerFew() const {
+      return (slot_use <= min_inner_slots);
+    }
+
+    inline bool IsInnerUnderflow() const {
+      return (slot_use < min_inner_slots);
     }
 
     inline NodeType GetType() const {
@@ -406,24 +418,24 @@ private:
     }
 
     // Atomically update the value using CAS
-    inline bool Update(PID key, Node *value, Node *old, size_t delta) {
+    inline bool Update(PID key, Node *value, Node *old) {
       // Node *head = table[key];
       if (__sync_bool_compare_and_swap(&table[key], old, value) == true) {
-        if (old != NULL) {
-          static_cast<DeltaNode *>(value)->SetBase(old);
-          if (old->IsDelta()) {
-            static_cast<DeltaNode *>(value)->SetLength(static_cast<DeltaNode *>(old)->GetLength() + 1);
-          } else {
-            static_cast<DeltaNode *>(value)->SetLength(1);
-          }
-          if (delta > 1) {
-            value->SetSize(delta);
-          } else {
-            value->SetSize(delta + old->GetSize());
-          }
-        } else {
-          value->SetSize(delta);
-        }
+        // if (old != NULL) {
+        //   static_cast<DeltaNode *>(value)->SetBase(old);
+        //   if (old->IsDelta()) {
+        //     static_cast<DeltaNode *>(value)->SetLength(static_cast<DeltaNode *>(old)->GetLength() + 1);
+        //   } else {
+        //     static_cast<DeltaNode *>(value)->SetLength(1);
+        //   }
+        //   if (delta > 1) {
+        //     value->SetSize(delta);
+        //   } else {
+        //     value->SetSize(delta + old->GetSize());
+        //   }
+        // } else {
+        //   value->SetSize(delta);
+        // }
         return true;  // Update success
       }
       return false;
@@ -490,7 +502,7 @@ public:
   /// comparison function
   explicit inline BWTree(const KeyComparator &kcf,
                          const AllocType &alloc = AllocType())
-      : m_root(NULL_PID), m_headleaf(NULL_PID), m_tailleaf(NULL_PID), m_allocator(alloc), m_comparator(kcf), pid_counter(0) {
+      : m_root(NULL_PID), m_headleaf(NULL_PID), m_tailleaf(NULL_PID), m_allocator(alloc), m_comparator(kcf), pid_counter(NULL_PID) {
     mapping_table.Initialize();
   }
 
@@ -693,7 +705,7 @@ private:
       case NodeType::separator_node: {
         SeparatorNode *sep = static_cast<SeparatorNode *>(n);
         typename SeparatorNode::alloc_type a(DeleteNodeAllocator());
-        if(mapping_table.ContainsKey(sep->child)) {
+        if (sep->child != NULL_PID) {
           ClearRecursive(sep->child);
         }
         a.destroy(sep);
@@ -764,6 +776,8 @@ private:
   inline KeyType FindUpperKey(PID pid, const KeyType &key) {
     Node *node = mapping_table.Get(pid);
     KeyType upper_key = key;
+    bool has_split = false;
+    KeyType split_key;
 
     while (node->IsDelta()) {
       switch (node->GetType()) {
@@ -778,10 +792,15 @@ private:
         case NodeType::update_node:
           break;
         case NodeType::split_node:
+          if (!has_split || KeyLess(static_cast<SplitNode *>(node)->GetKey(), split_key)) {
+            split_key = static_cast<SplitNode *>(node)->GetKey();
+          }
+          has_split = true;
           break;
         case NodeType::separator_node:
           KeyType left = static_cast<SeparatorNode *>(node)->left;
-          if (KeyLess(key, left) && (KeyEqual(key, upper_key) || KeyLess(left, upper_key))) {
+          if ((!has_split || KeyLess(left, split_key)) &
+              KeyLess(key, left) && (KeyEqual(key, upper_key) || KeyLess(left, upper_key))) {
             upper_key = left;
           }
           break;
@@ -801,8 +820,23 @@ private:
   }
 
   inline PID FindNextPID(PID pid, const KeyType &key) {
-    Node *node = mapping_table.Get(pid);
+    Node *node = GetNode(pid);
+    if (node == NULL) {
+      return m_root;
+    }
+    KeyType split_key;
+
+    bool has_split = false;
+    KeyType split_right = key;
+    PID child = NULL_PID;
+
+    bool has_separate = false;
+    KeyType right_most = key;
+    PID result = NULL_PID;
     while (node->IsDelta()) {
+      // if (node == NULL) {
+      //   return m_root;
+      // }
       switch (node->GetType()) {
         case NodeType::leaf_node:
           break;
@@ -815,25 +849,46 @@ private:
         case NodeType::update_node:
           break;
         case NodeType::split_node:
+          split_key = static_cast<SplitNode *>(node)->GetKey();
+          if (KeyGreaterEqual(key, split_key)) {
+            if (!has_split || KeyGreater(split_key, split_right)) {
+              has_split = true;
+              split_right = split_key;
+              child = static_cast<SplitNode *>(node)->GetSide();
+            }
+            // node = GetNode(static_cast<SplitNode *>(node)->GetSide());
+          }
           break;
         case NodeType::separator_node:
           KeyType left = static_cast<SeparatorNode *>(node)->left;
-          KeyType right = static_cast<SeparatorNode *>(node)->right;
-          bool right_most = static_cast<SeparatorNode *>(node)->right_most;
-          if (KeyLessEqual(left, key) && (right_most || KeyLess(key, right))) {
-            return static_cast<SeparatorNode *>(node)->child;
+          if (KeyLessEqual(left, key) && (!has_separate || KeyGreater(left, right_most))) {
+            has_separate = true;
+            right_most = left;
+            result = static_cast<SeparatorNode *>(node)->child;
           }
+          // KeyType right = static_cast<SeparatorNode *>(node)->right;
+          // bool right_most = static_cast<SeparatorNode *>(node)->right_most;
+          // if (KeyLessEqual(left, key) && (right_most || KeyLess(key, right))) {
+          //   return static_cast<SeparatorNode *>(node)->child;
+          // }
           break;
       }
+
       node = static_cast<DeltaNode *>(node)->GetBase();
+    }
+    if (child != NULL_PID) {
+      return child;
+    }
+    if (result != NULL_PID) {
+      return result;
     }
     InnerNode *inner = static_cast<InnerNode *>(node);
     unsigned short lo = 0;
-    while (lo < inner->slot_use && KeyLess(inner->slot_key[lo], key)) ++lo;
+    while (lo < inner->slot_use && KeyLessEqual(inner->slot_key[lo], key)) ++lo;
     return inner->child_pid[lo];
   }
 
-  inline bool LeafContainsKey(Node *node, const KeyType &key) {
+  inline size_t LeafContainsKey(Node *node, const KeyType &key) {
     while (node->IsDelta()) {
       switch (node->GetType()) {
         case NodeType::leaf_node:
@@ -842,17 +897,20 @@ private:
           break;
         case NodeType::insert_node:
           if (KeyEqual(key, static_cast<InsertNode *>(node)->insert_key)) {
-            return true;
+            return 1;
           }
           break;
         case NodeType::delete_node:
           if (KeyEqual(key, static_cast<DeleteNode *>(node)->GetKey())) {
-            return false;
+            return 0;
           }
           break;
         case NodeType::update_node:
           break;
         case NodeType::split_node:
+          if (KeyLessEqual(static_cast<SplitNode *>(node)->GetKey(), key)) {
+            return 2;
+          }
           break;
         case NodeType::separator_node:
           break;
@@ -862,10 +920,10 @@ private:
     LeafNode *leaf = static_cast<LeafNode *>(node);
     for (unsigned short slot = 0; slot < leaf->GetSize(); slot++) {
       if (KeyEqual(key, leaf->slot_key[slot])) {
-        return true;
+        return 1;
       }
     }
-    return false;
+    return 0;
   }
 
   inline Node *GetBaseNode(Node *n) const {
@@ -873,6 +931,65 @@ private:
       n = static_cast<DeltaNode *>(n)->GetBase();
     }
     return n;
+  }
+
+  inline std::vector<PointerPairType> GetAllPointer(Node *n) {
+    std::vector<PointerPairType> result;
+    bool has_split = false;
+    KeyType split_key;
+
+    while (n->IsDelta()) {
+      switch (n->GetType()) {
+        case NodeType::insert_node:
+          break;
+
+        case NodeType::delete_node:
+          break;
+
+        case NodeType::update_node:
+          break;
+
+        case NodeType::split_node:
+          if (!has_split || KeyLess(static_cast<SplitNode *>(n)->GetKey(), split_key)) {
+            split_key = static_cast<SplitNode *>(n)->GetKey();
+          }
+          has_split = true;
+          break;
+        case NodeType::leaf_node:
+          break;
+        case NodeType::inner_node:
+          break;
+        case NodeType::separator_node:
+          KeyType key = static_cast<SeparatorNode *>(n)->left;
+          if (!has_split || KeyLess(key, split_key)) {
+            PID pid = static_cast<SeparatorNode *>(n)->child;
+            result.push_back(std::make_pair(key, pid));
+          }
+          break;
+      }
+      n = static_cast<DeltaNode *>(n)->GetBase();
+    }
+    InnerNode *inner = static_cast<InnerNode *>(n);
+    for (unsigned short slot = 0; slot < inner->GetSize(); slot++) {
+      if (!has_split || KeyLess(inner->slot_key[slot], split_key)) {
+        result.push_back(std::make_pair(inner->slot_key[slot], inner->child_pid[slot + 1]));
+      }
+    }
+    result.push_back(std::make_pair(split_key, inner->child_pid[0]));
+    PointerPairType tmp = result[0];
+    result[0] = result[result.size() - 1];
+    result[result.size() - 1] = tmp;
+
+    for (int i = 1; i < result.size() - 1; i++)
+      for (int j = i + 1; j < result.size(); j++) {
+        if (KeyGreater(result[i].first, result[j].first)) {
+          PointerPairType tmp = result[i];
+          result[i] = result[j];
+          result[j] = tmp;
+        }
+      }
+    return result;
+
   }
 
   inline std::vector<DataPairListType> GetAllData(Node *n) {
@@ -913,7 +1030,7 @@ private:
           break;
 
         case NodeType::split_node:
-          if (!has_split) {
+          if (!has_split || KeyLess(static_cast<SplitNode *>(n)->GetKey(), split_key)) {
             split_key = static_cast<SplitNode *>(n)->GetKey();
             has_split = true;
           }
@@ -1029,7 +1146,7 @@ private:
   // Currently, returns -1 for error
   inline PID GetLeafNodePID(const KeyType &key) {
     PID current_pid = m_root;
-    Node* current = mapping_table.Get(m_root);
+    Node* current = GetNode(m_root);
 
     if(!current) return -1;
 
@@ -1037,7 +1154,7 @@ private:
     while(!current->IsLeaf()) {
 
       current_pid = FindNextPID(current_pid, key);
-      current = mapping_table.Get(current_pid);
+      current = GetNode(current_pid);
 
       // NodeType current_type = current->GetType();
       // // We need to take care of delta nodes from split/merge and regular inner node
@@ -1068,6 +1185,15 @@ private:
       // }
     }
 
+    // for (;;) {
+    //   if (LeafContainsKey(current, key) != 2)
+    //     break;
+    //   // LOG_INFO(" not here at %ld", current_pid);
+    //   current_pid = static_cast<LeafNode *>(GetBaseNode(current))->GetNext();
+    //   current = GetNode(current_pid);
+    //   // LOG_INFO("insert into %ld 2", current_pid);
+    // }
+
     return current_pid;
   }
 
@@ -1075,6 +1201,7 @@ private:
   size_t Count(const KeyType &key);
   // Split/ Merge are internal
   void SplitLeaf(PID pid);
+  void SplitInner(PID pid);
 
 public:
   // BW Tree API
