@@ -23,7 +23,7 @@
 #include <atomic>
 #include <iostream>
 
-#define BWTREE_MAX(a,b) ((a) < (b) ? (b) : (a))
+#define BWTREE_MAX(a, b) ((a) < (b) ? (b) : (a))
 #define BWTREE_NODE_SIZE 256
 #define MAPPING_TABLE_SIZE 4096
 #define DELTA_THRESHOLD 4
@@ -31,10 +31,10 @@
 namespace peloton {
 namespace index {
 
-template <typename KeyType, typename ValueType, typename KeyComparator, typename KeyEqualityChecker>
+template <typename KeyType, typename ValueType, typename KeyComparator,
+          typename KeyEqualityChecker>
 class BWTree {
-
-public:
+ public:
   // *** Constructed Types
 
   typedef size_t PID;
@@ -53,44 +53,43 @@ public:
     separator_node
   };
 
-public:
+ public:
   // *** Static Constant Options and Values of the BW Tree
 
   static const PID NULL_PID = 0;
 
-  static const unsigned short leaf_slot_max = BWTREE_MAX(8, BWTREE_NODE_SIZE / (sizeof(KeyType) + sizeof(ValueType)));
+  static const unsigned short leaf_slot_max =
+      BWTREE_MAX(8, BWTREE_NODE_SIZE / (sizeof(KeyType) + sizeof(ValueType)));
 
-  static const unsigned short inner_slot_max = BWTREE_MAX(8, BWTREE_NODE_SIZE / (sizeof(KeyType) + sizeof(PID)));
+  static const unsigned short inner_slot_max =
+      BWTREE_MAX(8, BWTREE_NODE_SIZE / (sizeof(KeyType) + sizeof(PID)));
 
   static const unsigned short min_leaf_slots = (leaf_slot_max / 2);
 
   static const unsigned short min_inner_slots = (inner_slot_max / 2);
 
-private:
-
+ private:
   // ValueList struct for handling duplicate keys
   struct ValueList {
     std::vector<ValueType> value_list;
 
-    // Insert Value to the value list. If the value already exists, we can ignore
+    // Insert Value to the value list. If the value already exists, we can
+    // ignore
     inline void InsertValue(ValueType value) {
       // if(FindValue(value) != -1) {
       //   return;
       // } else {
-        value_list.emplace_back(value);
+      value_list.emplace_back(value);
       // }
     }
 
-
     // Return the value at the given index
-    inline ValueType GetValue(int index) {
-      return value_list.at(index);
-    }
+    inline ValueType GetValue(int index) { return value_list.at(index); }
 
     // Remove the value
     inline void RemoveValue(ValueType value) {
       int index = FindValue(value);
-      if(index == -1) {
+      if (index == -1) {
         return;
       } else {
         value_list.erase(value_list.begin() + index);
@@ -100,24 +99,21 @@ private:
     // Find the index of value ( -1 indicates not exist)
     inline int FindValue(ValueType value) {
       int index = 0;
-      for (auto it = value_list.begin() ; it != value_list.end(); ++it) {
-        if(it->block == value.block && it->offset == value.offset) {
+      for (auto it = value_list.begin(); it != value_list.end(); ++it) {
+        if (it->block == value.block && it->offset == value.offset) {
           return index;
         }
-        index ++;
+        index++;
       }
       return -1;
     }
 
-    inline int GetSize() {
-      return value_list.size();
-    }
+    inline int GetSize() { return value_list.size(); }
 
-//    ~ValueList() {
-//      delete value_list;
-//    }
+    //    ~ValueList() {
+    //      delete value_list;
+    //    }
   };
-
 
   typedef std::pair<KeyType, ValueList> DataPairListType;
 
@@ -139,72 +135,45 @@ private:
       parent = NULL_PID;
     }
 
-    inline bool IsLeaf() const {
-      return (level == 0);
-    }
+    inline bool IsLeaf() const { return (level == 0); }
 
     inline bool IsDelta() const {
-      return (node_type != NodeType::leaf_node && node_type != NodeType::inner_node);
+      return (node_type != NodeType::leaf_node &&
+              node_type != NodeType::inner_node);
     }
 
-    inline bool IsLeafFull() const {
-      return (slot_use >= leaf_slot_max);
-    }
+    inline bool IsLeafFull() const { return (slot_use >= leaf_slot_max); }
 
-    inline bool IsLeafFew() const {
-      return (slot_use <= min_leaf_slots);
-    }
+    inline bool IsLeafFew() const { return (slot_use <= min_leaf_slots); }
 
-    inline bool IsLeafUnderflow() const {
-      return (slot_use < min_leaf_slots);
-    }
+    inline bool IsLeafUnderflow() const { return (slot_use < min_leaf_slots); }
 
-    inline bool IsInnerFull() const {
-      return (slot_use + 1 >= inner_slot_max);
-    }
+    inline bool IsInnerFull() const { return (slot_use + 1 >= inner_slot_max); }
 
-    inline bool IsInnerFew() const {
-      return (slot_use <= min_inner_slots);
-    }
+    inline bool IsInnerFew() const { return (slot_use <= min_inner_slots); }
 
     inline bool IsInnerUnderflow() const {
       return (slot_use < min_inner_slots);
     }
 
-    inline NodeType GetType() const {
-      return node_type;
-    }
+    inline NodeType GetType() const { return node_type; }
 
-    inline unsigned short GetLevel() const {
-      return level;
-    }
+    inline unsigned short GetLevel() const { return level; }
 
-    inline size_t GetSize() const {
-      return slot_use;
-    }
+    inline size_t GetSize() const { return slot_use; }
 
-    inline void SetSize(unsigned short size) {
-      slot_use = size;
-    }
+    inline void SetSize(unsigned short size) { slot_use = size; }
 
-    inline void AddSlotUse() {
-      slot_use++;
-    }
+    inline void AddSlotUse() { slot_use++; }
 
-    inline PID GetParent() const {
-      return parent;
-    }
+    inline PID GetParent() const { return parent; }
 
-    inline void SetParent(PID p) {
-      parent = p;
-    }
-
+    inline void SetParent(PID p) { parent = p; }
   };
 
   /// Extended structure of a inner node in memory. Contains only keys and no
   /// data items.
   struct InnerNode : public Node {
-
     typedef typename AllocType::template rebind<InnerNode>::other alloc_type;
 
     PID next_inner;
@@ -220,25 +189,19 @@ private:
     }
 
     inline void SetSlot(unsigned short slot, KeyType k, PID p) {
-      if (slot >= Node::GetSize())
-          Node::AddSlotUse();
+      if (slot >= Node::GetSize()) Node::AddSlotUse();
       slot_key[slot] = k;
       child_pid[slot + 1] = p;
     }
-    
-    inline PID GetNext() const {
-      return next_inner;
-    }
 
-    inline void SetNext(PID pid) {
-      next_inner = pid;
-    }
+    inline PID GetNext() const { return next_inner; }
+
+    inline void SetNext(PID pid) { next_inner = pid; }
   };
 
   /// Extended structure of a leaf node in memory. Contains pairs of keys and
   /// data items.
   struct LeafNode : public Node {
-
     typedef typename AllocType::template rebind<LeafNode>::other alloc_type;
 
     PID prev_leaf;
@@ -255,28 +218,18 @@ private:
     }
 
     inline void SetSlot(unsigned short slot, const DataPairListType &pair) {
-      if (slot >= Node::GetSize())
-          Node::AddSlotUse();
+      if (slot >= Node::GetSize()) Node::AddSlotUse();
       slot_key[slot] = pair.first;
       slot_data[slot] = pair.second;
     }
 
-    inline PID GetPrev() const {
-      return prev_leaf;
-    }
+    inline PID GetPrev() const { return prev_leaf; }
 
-    inline void SetPrev(PID pid) {
-      prev_leaf = pid;
-    }
+    inline void SetPrev(PID pid) { prev_leaf = pid; }
 
-    inline PID GetNext() const {
-      return next_leaf;
-    }
+    inline PID GetNext() const { return next_leaf; }
 
-    inline void SetNext(PID pid) {
-      next_leaf = pid;
-    }
-
+    inline void SetNext(PID pid) { next_leaf = pid; }
   };
 
   /// Extended structure of a delta node in memory. Contains a physical
@@ -293,21 +246,13 @@ private:
       Node::Initialize(t, l, 0);
     }
 
-    inline void SetBase(Node *n) {
-      base = n;
-    }
+    inline void SetBase(Node *n) { base = n; }
 
-    inline Node *GetBase() const {
-      return base;
-    }
+    inline Node *GetBase() const { return base; }
 
-    inline size_t GetLength() const {
-      return chain_length;
-    }
+    inline size_t GetLength() const { return chain_length; }
 
-    inline void SetLength(size_t l) {
-      chain_length = l;
-    }
+    inline void SetLength(size_t l) { chain_length = l; }
   };
 
   /// Extended structure of a delta node in memory. Contains a key, value
@@ -350,9 +295,7 @@ private:
       DeltaNode::Initialize(NodeType::delete_node, l);
     }
 
-    inline KeyType GetKey() const {
-      return delete_key;
-    }
+    inline KeyType GetKey() const { return delete_key; }
 
     inline DataPairType GetData() const {
       return std::make_pair(delete_key, delete_value);
@@ -392,19 +335,16 @@ private:
       DeltaNode::Initialize(NodeType::split_node, l);
     }
 
-    inline KeyType GetKey() const {
-      return split_key;
-    }
+    inline KeyType GetKey() const { return split_key; }
 
-    inline PID GetSide() const {
-      return side;
-    }
+    inline PID GetSide() const { return side; }
   };
 
   /// Extended structure of a delta node in memory. Contains a key range
   /// [min_key, max_key) and a logical pointer to the child.
   struct SeparatorNode : public DeltaNode {
-    typedef typename AllocType::template rebind<SeparatorNode>::other alloc_type;
+    typedef
+        typename AllocType::template rebind<SeparatorNode>::other alloc_type;
 
     KeyType left;
     KeyType right;
@@ -412,7 +352,8 @@ private:
 
     bool right_most;
 
-    inline void Initialize(const KeyType &left_key, const KeyType &right_key, const PID pid, bool r, size_t l) {
+    inline void Initialize(const KeyType &left_key, const KeyType &right_key,
+                           const PID pid, bool r, size_t l) {
       left = left_key;
       right = right_key;
       child = pid;
@@ -421,30 +362,20 @@ private:
     }
   };
 
-  struct EpochTable{
-    std::vector<Node*> table;
+  struct EpochTable {
+    std::vector<Node *> table;
 
-    inline void RegisterNode(Node* node) {
-      table.push_back(node);
-    }
+    inline void RegisterNode(Node *node) { table.push_back(node); }
 
-    inline Node* GetNode(int i) {
-      return table.at(i);
-    }
+    inline Node *GetNode(int i) { return table.at(i); }
 
-    inline int GetSize() {
-      return table.size();
-    }
+    inline int GetSize() { return table.size(); }
   };
 
-
   struct MappingTable {
+    Node **table = new Node *[MAPPING_TABLE_SIZE]();
 
-    Node** table = new Node*[MAPPING_TABLE_SIZE]();
-
-    inline void Initialize() {
-      std::fill_n(table, MAPPING_TABLE_SIZE, 0);
-    }
+    inline void Initialize() { std::fill_n(table, MAPPING_TABLE_SIZE, 0); }
 
     // Atomically update the value using CAS
     inline bool Update(PID key, Node *value, Node *old) {
@@ -453,7 +384,8 @@ private:
         // if (old != NULL) {
         //   static_cast<DeltaNode *>(value)->SetBase(old);
         //   if (old->IsDelta()) {
-        //     static_cast<DeltaNode *>(value)->SetLength(static_cast<DeltaNode *>(old)->GetLength() + 1);
+        //     static_cast<DeltaNode *>(value)->SetLength(static_cast<DeltaNode
+        //     *>(old)->GetLength() + 1);
         //   } else {
         //     static_cast<DeltaNode *>(value)->SetLength(1);
         //   }
@@ -478,30 +410,23 @@ private:
       return false;
     }
 
-    inline int GetSize() {
-      return MAPPING_TABLE_SIZE;
-    }
+    inline int GetSize() { return MAPPING_TABLE_SIZE; }
 
     // Get physical pointer from PID
-    inline Node* Get(PID key) {
-      return table[key];
-    }
+    inline Node *Get(PID key) { return table[key]; }
 
     // This will be changed if we will not use array
     inline bool ContainsKey(PID key) {
-      if(table[key]){
+      if (table[key]) {
         return true;
       }
       return false;
     }
 
-    ~MappingTable(){
-      delete [] table;
-    }
+    ~MappingTable() { delete[] table; }
   };
 
-
-private:
+ private:
   // *** Tree Object Data Members
 
   /// Logical pointer to the BW tree's root node, either leaf or inner node
@@ -528,25 +453,25 @@ private:
   /// Epoch table
   EpochTable epoch_table;
 
-public:
-
+ public:
   /// Default constructor initializing an empty BW tree with the standard key
   /// comparison function
   explicit inline BWTree(const KeyComparator &kcf,
                          const AllocType &alloc = AllocType())
-      : m_root(NULL_PID), m_headleaf(NULL_PID), m_tailleaf(NULL_PID), m_allocator(alloc), m_comparator(kcf), pid_counter(NULL_PID) {
+      : m_root(NULL_PID),
+        m_headleaf(NULL_PID),
+        m_tailleaf(NULL_PID),
+        m_allocator(alloc),
+        m_comparator(kcf),
+        pid_counter(NULL_PID) {
     mapping_table.Initialize();
   }
 
-
   /// Frees up all used B+ tree memory pages
-  inline ~BWTree() {
-    Clear();
-  }
+  inline ~BWTree() { Clear(); }
 
-private:
+ private:
   // *** Convenient Key Comparison Functions Generated From key_less
-
 
   /// True if a < b ? "constructed" from m_key_less()
   inline bool KeyLess(const KeyType &a, const KeyType &b) const {
@@ -560,9 +485,9 @@ private:
 
   // struct {
   //   KeyComparator cmp;
-  //   bool operator()(const DataPairType &a, const DataPairType &b) {   
+  //   bool operator()(const DataPairType &a, const DataPairType &b) {
   //     return cmp(a.first, b.first);
-  //   }   
+  //   }
   // } data_comparator;
 
   /// True if a <= b ? constructed from key_less()
@@ -586,8 +511,7 @@ private:
     return !m_comparator(a, b) && !m_comparator(b, a);
   }
 
-
-private:
+ private:
   // *** Node Object Allocation and Deallocation Functions
 
   typename LeafNode::alloc_type LeafNodeAllocator() {
@@ -657,7 +581,8 @@ private:
   }
 
   /// Allocate and initialize an delete delta node
-  inline DeleteNode *AllocateDeleteWithValue(const DataPairType &key, size_t l) {
+  inline DeleteNode *AllocateDeleteWithValue(const DataPairType &key,
+                                             size_t l) {
     DeleteNode *n = new (DeleteNodeAllocator().allocate(1)) DeleteNode();
     n->InitializeWithValue(key, l);
     return n;
@@ -678,8 +603,10 @@ private:
   }
 
   /// Allocate and initialize an separator delta node
-  inline SeparatorNode *AllocateSeparator(KeyType &left_key, KeyType &right_key, PID leaf, size_t l) {
-    SeparatorNode *n = new (SeparateNodeAllocator().allocate(1)) SeparatorNode();
+  inline SeparatorNode *AllocateSeparator(KeyType &left_key, KeyType &right_key,
+                                          PID leaf, size_t l) {
+    SeparatorNode *n =
+        new (SeparateNodeAllocator().allocate(1)) SeparatorNode();
     if (KeyEqual(left_key, right_key)) {
       n->Initialize(left_key, right_key, leaf, true, l);
     } else {
@@ -690,38 +617,32 @@ private:
 
   /// Correctly free either inner or leaf node, destructs all contained key
   /// and value objects & frees delta nodes
-  inline void FreeNode(Node *n)
-  {
+  inline void FreeNode(Node *n) {
     switch (n->GetType()) {
-      case NodeType::leaf_node:
-        {
-          LeafNode *ln = static_cast<LeafNode *>(n);
-          typename LeafNode::alloc_type a(LeafNodeAllocator());
-          a.destroy(ln);
-          a.deallocate(ln, 1);
-        }
-        break;
+      case NodeType::leaf_node: {
+        LeafNode *ln = static_cast<LeafNode *>(n);
+        typename LeafNode::alloc_type a(LeafNodeAllocator());
+        a.destroy(ln);
+        a.deallocate(ln, 1);
+      } break;
       case NodeType::inner_node: {
         InnerNode *inner = static_cast<InnerNode *>(n);
         typename InnerNode::alloc_type a(InnerNodeAllocator());
         a.destroy(inner);
         a.deallocate(inner, 1);
-      }
-        break;
+      } break;
       case NodeType::insert_node: {
         InsertNode *ins = static_cast<InsertNode *>(n);
         typename InsertNode::alloc_type a(InsertNodeAllocator());
         a.destroy(ins);
         a.deallocate(ins, 1);
-      }
-        break;
+      } break;
       case NodeType::delete_node: {
         DeleteNode *del = static_cast<DeleteNode *>(n);
         typename DeleteNode::alloc_type a(DeleteNodeAllocator());
         a.destroy(del);
         a.deallocate(del, 1);
-      }
-        break;
+      } break;
       case NodeType::update_node:
         break;
       case NodeType::split_node: {
@@ -732,8 +653,7 @@ private:
         // }
         a.destroy(split);
         a.deallocate(split, 1);
-      }
-        break;
+      } break;
       case NodeType::separator_node: {
         SeparatorNode *sep = static_cast<SeparatorNode *>(n);
         typename SeparatorNode::alloc_type a(DeleteNodeAllocator());
@@ -742,44 +662,40 @@ private:
         }
         a.destroy(sep);
         a.deallocate(sep, 1);
-      }
-        break;
+      } break;
     }
   }
 
-public:
+ public:
   void Clear() {
-    if(m_root != NULL_PID) {
+    if (m_root != NULL_PID) {
       ClearRecursive(m_root);
     }
 
-    for(int i = 0; i < epoch_table.GetSize(); i++) {
+    for (int i = 0; i < epoch_table.GetSize(); i++) {
       FreeNode(epoch_table.GetNode(i));
     }
   }
 
-
-private:
-
+ private:
   void ClearRecursive(PID pid) {
-    if(!mapping_table.ContainsKey(pid)) {
+    if (!mapping_table.ContainsKey(pid)) {
       return;
     }
-    Node* node = mapping_table.Get(pid);
-    while(node->IsDelta()) {
-      Node* prev= node;
+    Node *node = mapping_table.Get(pid);
+    while (node->IsDelta()) {
+      Node *prev = node;
       node = static_cast<DeltaNode *>(node)->GetBase();
       FreeNode(prev);
     }
 
-    if(node->GetType() == NodeType::leaf_node) {
-      LeafNode* leaf_node = static_cast<LeafNode*>(node);
+    if (node->GetType() == NodeType::leaf_node) {
+      LeafNode *leaf_node = static_cast<LeafNode *>(node);
       FreeNode(leaf_node);
 
     } else if (node->GetType() == NodeType::inner_node) {
-      InnerNode* inner_node = static_cast<InnerNode *>(node);
-      for (unsigned short slot = 0; slot < inner_node->slot_use + 1; ++slot)
-      {
+      InnerNode *inner_node = static_cast<InnerNode *>(node);
+      for (unsigned short slot = 0; slot < inner_node->slot_use + 1; ++slot) {
         ClearRecursive(inner_node->child_pid[slot]);
       }
       FreeNode(inner_node);
@@ -793,8 +709,7 @@ private:
   }
 
   inline Node *GetNode(PID pid) {
-    if (mapping_table.Get(pid) == NULL)
-      return NULL;
+    if (mapping_table.Get(pid) == NULL) return NULL;
     return mapping_table.Get(pid);
   }
 
@@ -802,8 +717,9 @@ private:
   //   mapping_table.Update(pid, n);
   // }
 
-private:
-  inline unsigned short FindLower(const InnerNode *n, const KeyType &key) const {
+ private:
+  inline unsigned short FindLower(const InnerNode *n,
+                                  const KeyType &key) const {
     unsigned short lo = 0;
     while (lo < n->slot_use && KeyLess(n->slot_key[lo], key)) ++lo;
     return lo;
@@ -828,15 +744,16 @@ private:
         case NodeType::update_node:
           break;
         case NodeType::split_node:
-          if (!has_split || KeyLess(static_cast<SplitNode *>(node)->GetKey(), split_key)) {
+          if (!has_split ||
+              KeyLess(static_cast<SplitNode *>(node)->GetKey(), split_key)) {
             split_key = static_cast<SplitNode *>(node)->GetKey();
           }
           has_split = true;
           break;
         case NodeType::separator_node:
           KeyType left = static_cast<SeparatorNode *>(node)->left;
-          if ((!has_split || KeyLess(left, split_key)) &
-              KeyLess(key, left) && (KeyEqual(key, upper_key) || KeyLess(left, upper_key))) {
+          if ((!has_split || KeyLess(left, split_key)) & KeyLess(key, left) &&
+              (KeyEqual(key, upper_key) || KeyLess(left, upper_key))) {
             upper_key = left;
           }
           break;
@@ -846,7 +763,8 @@ private:
     InnerNode *inner = static_cast<InnerNode *>(node);
     for (unsigned short lo = 0; lo < inner->slot_use; lo++) {
       if (KeyLess(key, inner->slot_key[lo])) {
-        if (KeyEqual(key, upper_key) || KeyLess(inner->slot_key[lo], upper_key)) {
+        if (KeyEqual(key, upper_key) ||
+            KeyLess(inner->slot_key[lo], upper_key)) {
           upper_key = inner->slot_key[lo];
         }
         break;
@@ -897,14 +815,16 @@ private:
           break;
         case NodeType::separator_node:
           KeyType left = static_cast<SeparatorNode *>(node)->left;
-          if (KeyLessEqual(left, key) && (!has_separate || KeyGreater(left, right_most))) {
+          if (KeyLessEqual(left, key) &&
+              (!has_separate || KeyGreater(left, right_most))) {
             has_separate = true;
             right_most = left;
             result = static_cast<SeparatorNode *>(node)->child;
           }
           // KeyType right = static_cast<SeparatorNode *>(node)->right;
           // bool right_most = static_cast<SeparatorNode *>(node)->right_most;
-          // if (KeyLessEqual(left, key) && (right_most || KeyLess(key, right))) {
+          // if (KeyLessEqual(left, key) && (right_most || KeyLess(key, right)))
+          // {
           //   return static_cast<SeparatorNode *>(node)->child;
           // }
           break;
@@ -1030,7 +950,8 @@ private:
           break;
 
         case NodeType::split_node:
-          if (!has_split || KeyLess(static_cast<SplitNode *>(n)->GetKey(), split_key)) {
+          if (!has_split ||
+              KeyLess(static_cast<SplitNode *>(n)->GetKey(), split_key)) {
             split_key = static_cast<SplitNode *>(n)->GetKey();
             has_split = true;
           }
@@ -1052,7 +973,8 @@ private:
     InnerNode *inner = static_cast<InnerNode *>(n);
     for (unsigned short slot = 0; slot < inner->GetSize(); slot++) {
       if (!has_split || KeyLess(inner->slot_key[slot], split_key)) {
-        result.push_back(std::make_pair(inner->slot_key[slot], inner->child_pid[slot + 1]));
+        result.push_back(
+            std::make_pair(inner->slot_key[slot], inner->child_pid[slot + 1]));
       }
     }
     result.push_back(std::make_pair(split_key, inner->child_pid[0]));
@@ -1069,7 +991,6 @@ private:
         }
       }
     return result;
-
   }
 
   inline std::vector<DataPairListType> GetAllData(Node *n) {
@@ -1085,9 +1006,9 @@ private:
       switch (n->GetType()) {
         case NodeType::insert_node:
           data = static_cast<InsertNode *>(n)->GetData();
-          if ((!has_split || KeyLess(data.first, split_key))
-              && !VectorContainsData(deleted, data)
-              && !KeyVectorContainsKey(deleted_key, data.first)) {
+          if ((!has_split || KeyLess(data.first, split_key)) &&
+              !VectorContainsData(deleted, data) &&
+              !KeyVectorContainsKey(deleted_key, data.first)) {
             inserted.push_back(data);
           }
           break;
@@ -1102,15 +1023,16 @@ private:
 
         case NodeType::update_node:
           data = static_cast<UpdateNode *>(n)->get_data();
-          if ((!has_split || KeyLess(data.first, split_key))
-              && !VectorContainsData(deleted, data)
-              && !KeyVectorContainsKey(deleted_key, data.first)) {
+          if ((!has_split || KeyLess(data.first, split_key)) &&
+              !VectorContainsData(deleted, data) &&
+              !KeyVectorContainsKey(deleted_key, data.first)) {
             inserted.push_back(data);
           }
           break;
 
         case NodeType::split_node:
-          if (!has_split || KeyLess(static_cast<SplitNode *>(n)->GetKey(), split_key)) {
+          if (!has_split ||
+              KeyLess(static_cast<SplitNode *>(n)->GetKey(), split_key)) {
             split_key = static_cast<SplitNode *>(n)->GetKey();
             has_split = true;
           }
@@ -1126,16 +1048,16 @@ private:
     }
     std::vector<DataPairListType> result;
 
-
     LeafNode *leaf = static_cast<LeafNode *>(n);
     for (unsigned short slot = 0; slot < leaf->GetSize(); slot++) {
-      if ((!has_split || KeyLess(leaf->slot_key[slot], split_key))
-          && !KeyVectorContainsKey(deleted_key, leaf->slot_key[slot])) {
-
+      if ((!has_split || KeyLess(leaf->slot_key[slot], split_key)) &&
+          !KeyVectorContainsKey(deleted_key, leaf->slot_key[slot])) {
         ValueList value_list = leaf->slot_data[slot];
         ValueList filtered_list;
         for (int i = 0; i < leaf->slot_data[slot].GetSize(); i++) {
-          if (!VectorContainsData(deleted, std::make_pair(leaf->slot_key[slot], value_list.GetValue(i)))) {
+          if (!VectorContainsData(deleted,
+                                  std::make_pair(leaf->slot_key[slot],
+                                                 value_list.GetValue(i)))) {
             filtered_list.InsertValue(value_list.GetValue(i));
           }
         }
@@ -1151,7 +1073,6 @@ private:
     //     }
     //   }
     // }
-
 
     for (int i = 0; i < inserted.size(); i++) {
       bool match = false;
@@ -1185,36 +1106,35 @@ private:
   }
 
   // Helper function for checking if the key is in the vector.
-  inline bool VectorContainsKey(std::vector<DataPairType> & data, const KeyType &key) const {
-    for (auto it = data.begin() ; it != data.end(); ++it) {
-      if(KeyEqual(key, it->first)) {
+  inline bool VectorContainsKey(std::vector<DataPairType> &data,
+                                const KeyType &key) const {
+    for (auto it = data.begin(); it != data.end(); ++it) {
+      if (KeyEqual(key, it->first)) {
         return true;
       }
     }
     return false;
   }
-
 
   // Helper function for checking if the key is in the vector.
-  inline bool VectorContainsKey2(std::vector<DataPairListType> & data, const KeyType &key) const {
-    for (auto it = data.begin() ; it != data.end(); ++it) {
-      if(KeyEqual(key, it->first)) {
+  inline bool VectorContainsKey2(std::vector<DataPairListType> &data,
+                                 const KeyType &key) const {
+    for (auto it = data.begin(); it != data.end(); ++it) {
+      if (KeyEqual(key, it->first)) {
         return true;
       }
     }
     return false;
   }
-
 
   // Helper function for checking if the data is in the vector.
-  inline bool VectorContainsData(std::vector<DataPairType> & data, const DataPairType &pair) const {
+  inline bool VectorContainsData(std::vector<DataPairType> &data,
+                                 const DataPairType &pair) const {
     KeyType key = pair.first;
     ValueType value = pair.second;
-    for (auto it = data.begin() ; it != data.end(); ++it) {
-      if (KeyEqual(key, it->first)
-        && value.block == (it->second).block
-        && value.offset == (it->second).offset) {
-
+    for (auto it = data.begin(); it != data.end(); ++it) {
+      if (KeyEqual(key, it->first) && value.block == (it->second).block &&
+          value.offset == (it->second).offset) {
         return true;
       }
     }
@@ -1222,9 +1142,10 @@ private:
   }
 
   // Helper function for checking if the key is in the vector.
-  inline bool KeyVectorContainsKey(std::vector<KeyType> & keys, const KeyType &key) const {
-    for (auto it = keys.begin() ; it != keys.end(); ++it) {
-      if(KeyEqual(key, *it)) {
+  inline bool KeyVectorContainsKey(std::vector<KeyType> &keys,
+                                   const KeyType &key) const {
+    for (auto it = keys.begin(); it != keys.end(); ++it) {
+      if (KeyEqual(key, *it)) {
         return true;
       }
     }
@@ -1235,18 +1156,18 @@ private:
   // Currently, returns -1 for error
   inline PID GetLeafNodePID(const KeyType &key) {
     PID current_pid = m_root;
-    Node* current = GetNode(m_root);
+    Node *current = GetNode(m_root);
 
-    if(!current) return -1;
+    if (!current) return -1;
 
     // Keep traversing tree until we find the target leaf node
-    while(!current->IsLeaf()) {
-
+    while (!current->IsLeaf()) {
       current_pid = FindNextPID(current_pid, key);
       current = GetNode(current_pid);
 
       // NodeType current_type = current->GetType();
-      // // We need to take care of delta nodes from split/merge and regular inner node
+      // // We need to take care of delta nodes from split/merge and regular
+      // inner node
       // switch(current_type) {
 
       //   case NodeType::insert_node:
@@ -1265,7 +1186,8 @@ private:
       //   case NodeType::leaf_node:
       //     break;
       //   case NodeType::inner_node :
-      //     // const InnerNode* current_inner = static_cast<const InnerNode *>(current);
+      //     // const InnerNode* current_inner = static_cast<const InnerNode
+      //     *>(current);
       //     // int slot = FindLower(current_inner, key);
       //     // current_pid = current_inner->child_pid[slot];
       //     current_pid = FindNextPID(current_pid, key);
@@ -1286,7 +1208,7 @@ private:
     return current_pid;
   }
 
-private:
+ private:
   size_t Count(const KeyType &key);
   // Split/ Merge are internal
   void SplitLeaf(PID pid);
@@ -1295,7 +1217,7 @@ private:
   void ConsolidateLeafNode(PID pid);
   void ConsolidateInnerNode(PID pid);
 
-public:
+ public:
   // BW Tree API
   void InsertData(const DataPairType &x);
   void DeleteKey(const KeyType &x);
@@ -1305,17 +1227,15 @@ public:
   std::vector<DataPairType> Search(const KeyType &key);
   std::vector<DataPairType> SearchAll();
 
-
-public:
+ public:
   // *** Debug Printing
 
   // Print out the BW tree structure.
   void Print();
 
-private:
-
+ private:
   // Print out the BW tree node
-  void PrintNode(const Node* node);
+  void PrintNode(const Node *node);
 };
 
 }  // End index namespace
