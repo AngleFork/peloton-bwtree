@@ -77,17 +77,13 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::InsertData(_
       curr_pid = FindNextPID(curr_pid, key);
       // LOG_INFO("insert into %ld 1", curr_pid);
       curr_node = GetNode(curr_pid);
-      if (curr_node == NULL) {
-        // LOG_INFO(" pid = %ld is null", curr_pid);
-      }
+
     }
 
     // check whether the leaf node contains the key, need api
-    size_t delta;
     PID prev_pid;
     for (;;) {
-      delta = LeafContainsKey(curr_node, x.first);
-      if (delta != 2)
+      if (isInRange(curr_node, x.first))
         break;
       // LOG_INFO(" not here at %ld", curr_pid);
       prev_pid = curr_pid;
@@ -111,7 +107,7 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::InsertData(_
     } else {
       insert_delta->SetLength(1);
     }
-    insert_delta->SetSize(((delta == 1) ? 0 : 1) + curr_node->GetSize());
+    insert_delta->SetSize(((LeafContainsKey(curr_node, x.first) == 1) ? 0 : 1) + curr_node->GetSize());
 
     // CAS
     if (mapping_table.Update(curr_pid, insert_delta, curr_node)) {
@@ -132,6 +128,8 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::InsertData(_
   } else {
     // LOG_INFO("after insert is done on pid = %ld, node is not null", curr_pid);
   }
+
+  // LOG_INFO(" size = %ld", result.size());
 
 
 }
@@ -173,15 +171,13 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::UpdateData(c
     }
 
     // check whether the leaf node contains the key, need api
-    size_t delta;
     for (;;) {
-      delta = LeafContainsKey(curr_node, x.first);
-      if (delta != 2)
+      if (isInRange(curr_node, x.first))
         break;
       curr_pid = static_cast<LeafNode *>(GetBaseNode(curr_node))->GetNext();
       curr_node = GetNode(curr_pid);
     }
-    if (delta == 0) {
+    if (!LeafContainsKey(curr_node, x.first)) {
       break;
     }
 
@@ -239,18 +235,13 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteKey(co
     }
     
     // check whether the leaf node contains the key, need api
-    size_t delta;
     for (;;) {
-      delta = LeafContainsKey(curr_node, x);
-      if (delta != 2)
+      if (isInRange(curr_node, x))
         break;
       curr_pid = static_cast<LeafNode *>(GetBaseNode(curr_node))->GetNext();
       curr_node = GetNode(curr_pid);
     }
 
-    // if (delta == 0) {
-    //   break;
-    // }
 
     DeleteNode *delete_delta = AllocateDeleteNoValue(x, curr_node->GetLevel());
     delete_delta->SetBase(curr_node);
@@ -306,24 +297,20 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::DeleteData(c
     PID curr_pid = m_root;
     Node *curr_node = GetNode(m_root);
 
+
     while (!curr_node->IsLeaf()) {
       curr_pid = FindNextPID(curr_pid, key);
       curr_node = GetNode(curr_pid);
     }
     
     // check whether the leaf node contains the key, need api
-    size_t delta;
     for (;;) {
-      delta = LeafContainsKey(curr_node, x.first);
-      if (delta != 2)
+      if (isInRange(curr_node, x.first))
         break;
       curr_pid = static_cast<LeafNode *>(GetBaseNode(curr_node))->GetNext();
       curr_node = GetNode(curr_pid);
     }
 
-    // if (delta == 0) {
-    //   break;
-    // }
 
     DeleteNode *delete_delta = AllocateDeleteWithValue(x, curr_node->GetLevel());
     delete_delta->SetBase(curr_node);
@@ -487,9 +474,9 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SplitLeaf(PI
     // LOG_INFO("after add, size = %ld", separator_delta->GetSize());
 
     if (mapping_table.Update(parent_pid, separator_delta, parent)) {
-      // if (separator_delta->IsInnerFull()) {
-      //   SplitInner(parent_pid);
-      // }
+      if (separator_delta->IsInnerFull()) {
+        SplitInner(parent_pid);
+      }
       break;
     } else {
       separator_delta->child = NULL_PID;
@@ -560,6 +547,8 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SplitInner(P
     parent_pid = base_node->GetParent();
     // LOG_INFO("split pid = %ld, parent = %ld", pid, parent_pid);
 
+    PID former_next_inner_pid = static_cast<InnerNode *>(base_node)->GetNext();
+
 
     std::vector<PointerPairType> buffer = GetAllPointer(n);
     // LOG_INFO(" buffer size = %ld", buffer.size());
@@ -600,6 +589,10 @@ void BWTree<KeyType, ValueType, KeyComparator, KeyEqualityChecker>::SplitInner(P
 
 
     if (mapping_table.Update(pid, split_delta, n)) {
+
+      base_node->SetNext(next_inner_pid);
+      next_inner->SetNext(former_next_inner_pid);
+
 
       for (unsigned short slot = 0; slot <= next_inner->GetSize(); slot++) {
         GetBaseNode(GetNode(next_inner->child_pid[slot]))->SetParent(next_inner_pid);
@@ -684,14 +677,16 @@ std::vector<std::pair<KeyType, ValueType>> BWTree<KeyType, ValueType, KeyCompara
 
   // Check if we have a match (possible improvement: implement binary search)
   for (auto it = node_data.begin() ; it != node_data.end(); ++it) {
+    // // LOG_INFO(".");
+    // // LOG_INFO(" size = %d", it->second.GetSize());
     // For duplicate keys, there's an edge case that some records can be placed at the
     // next node so we need to check the next page as well.
 //    if(it != node_data.end() && (next(it) == node_data.end()) && key_equal(key, it->first)) {
 //      // TODO: handle duplicate keys
 //    }
-    if(KeyEqual(key, it->first)) {
+    if (KeyEqual(key, it->first)) {
       // LOG_INFO("key match found");
-      // LOG_INFO(" size = %d", it->second.GetSize());
+      // // LOG_INFO(" size = %d", it->second.GetSize());
       for (int i = 0; i < it->second.GetSize(); i++) {
         result.push_back(std::make_pair(it->first, it->second.GetValue(i)));
       }

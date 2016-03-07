@@ -206,11 +206,14 @@ private:
 
     typedef typename AllocType::template rebind<InnerNode>::other alloc_type;
 
+    PID next_inner;
+
     KeyType slot_key[inner_slot_max];
 
     PID child_pid[inner_slot_max + 1];
 
     inline void Initialize(unsigned short l, PID child) {
+      next_inner = NULL_PID;
       child_pid[0] = child;
       Node::Initialize(NodeType::inner_node, l, 0);
     }
@@ -220,6 +223,14 @@ private:
           Node::AddSlotUse();
       slot_key[slot] = k;
       child_pid[slot + 1] = p;
+    }
+    
+    inline PID GetNext() const {
+      return next_inner;
+    }
+
+    inline void SetNext(PID pid) {
+      next_inner = pid;
     }
   };
 
@@ -879,13 +890,57 @@ private:
     if (child != NULL_PID) {
       return child;
     }
-    if (result != NULL_PID) {
-      return result;
-    }
+    // if (result != NULL_PID) {
+    //   return result;
+    // }
     InnerNode *inner = static_cast<InnerNode *>(node);
     unsigned short lo = 0;
     while (lo < inner->slot_use && KeyLessEqual(inner->slot_key[lo], key)) ++lo;
-    return inner->child_pid[lo];
+    // return inner->child_pid[lo];
+    if (lo == 0) {
+      if (has_separate)
+        return result;
+      else
+        return inner->child_pid[lo];
+    }
+
+    if (has_separate && KeyLess(inner->slot_key[lo - 1], right_most)) {
+      return result;
+    } else {
+      return inner->child_pid[lo];
+    }
+  }
+
+  inline bool isInRange(Node *node, const KeyType &key) {
+    while (node->IsDelta()) {
+      switch (node->GetType()) {
+        case NodeType::leaf_node:
+          break;
+        case NodeType::inner_node:
+          break;
+        case NodeType::insert_node:
+          if (KeyEqual(key, static_cast<InsertNode *>(node)->insert_key)) {
+            return true;
+          }
+          break;
+        case NodeType::delete_node:
+          if (KeyEqual(key, static_cast<DeleteNode *>(node)->GetKey())) {
+            return true;
+          }
+          break;
+        case NodeType::update_node:
+          break;
+        case NodeType::split_node:
+          if (KeyLessEqual(static_cast<SplitNode *>(node)->GetKey(), key)) {
+            return false;
+          }
+          break;
+        case NodeType::separator_node:
+          break;
+      }
+      node = static_cast<DeltaNode *>(node)->GetBase();
+    }
+    return true;
   }
 
   inline size_t LeafContainsKey(Node *node, const KeyType &key) {
@@ -952,8 +1007,8 @@ private:
         case NodeType::split_node:
           if (!has_split || KeyLess(static_cast<SplitNode *>(n)->GetKey(), split_key)) {
             split_key = static_cast<SplitNode *>(n)->GetKey();
+            has_split = true;
           }
-          has_split = true;
           break;
         case NodeType::leaf_node:
           break;
@@ -1051,17 +1106,26 @@ private:
     for (unsigned short slot = 0; slot < leaf->GetSize(); slot++) {
       if ((!has_split || KeyLess(leaf->slot_key[slot], split_key))
           && !KeyVectorContainsKey(deleted_key, leaf->slot_key[slot])) {
-        result.push_back(std::make_pair(leaf->slot_key[slot], leaf->slot_data[slot]));
+
+        ValueList value_list = leaf->slot_data[slot];
+        ValueList filtered_list;
+        for (int i = 0; i < leaf->slot_data[slot].GetSize(); i++) {
+          if (!VectorContainsData(deleted, std::make_pair(leaf->slot_key[slot], value_list.GetValue(i)))) {
+            filtered_list.InsertValue(value_list.GetValue(i));
+          }
+        }
+
+        result.push_back(std::make_pair(leaf->slot_key[slot], filtered_list));
       }
     }
 
-    for (int i = 0; i < deleted.size(); i++) {
-      for (int j = 0; j < result.size(); j++) {
-        if (KeyEqual(deleted[i].first, result[j].first)) {
-          result[j].second.RemoveValue(deleted[i].second);
-        }
-      }
-    }
+    // for (int i = 0; i < deleted.size(); i++) {
+    //   for (int j = 0; j < result.size(); j++) {
+    //     if (KeyEqual(deleted[i].first, result[j].first)) {
+    //       result[j].second.RemoveValue(deleted[i].second);
+    //     }
+    //   }
+    // }
 
 
     for (int i = 0; i < inserted.size(); i++) {
