@@ -309,8 +309,8 @@ TEST(IndexTests, ComplexInsertDeleteTest) {
   std::unique_ptr<index::Index> index(BuildIndex());
 
   // Single threaded test
-//  size_t scale_factor = 20;
-  size_t scale_factor = 1;
+  size_t scale_factor = 20;
+//  size_t scale_factor = 1;
   LaunchParallelTest(1, InsertTest, index.get(), pool, scale_factor);
   LaunchParallelTest(1, DeleteTest, index.get(), pool, scale_factor);
 
@@ -499,7 +499,7 @@ TEST(IndexTests, MultiThreadedInsertTest) {
   LaunchParallelTest(num_threads, InsertTest, index.get(), pool, scale_factor);
 
   locations = index->ScanAllKeys();
-  EXPECT_EQ(locations.size(), 9 * num_threads);
+  EXPECT_EQ(locations.size(), 9  * num_threads);
 
   std::unique_ptr<storage::Tuple> key0(new storage::Tuple(key_schema, true));
   std::unique_ptr<storage::Tuple> keynonce(new storage::Tuple(key_schema, true));
@@ -519,6 +519,97 @@ TEST(IndexTests, MultiThreadedInsertTest) {
 
   delete tuple_schema;
 }
+
+TEST(IndexTests, MultiThreadedTest) {
+  auto pool = TestingHarness::GetInstance().GetTestingPool();
+  std::vector<ItemPointer> locations;
+
+  // INDEX
+  std::unique_ptr<index::Index> index(BuildIndex());
+
+  // Parallel Test
+  size_t num_threads = 4;
+  size_t scale_factor = 1;
+  LaunchParallelTest(num_threads, InsertTest, index.get(), pool, scale_factor);
+  LaunchParallelTest(num_threads, DeleteTest, index.get(), pool, scale_factor);
+
+  std::unique_ptr<storage::Tuple> key0(new storage::Tuple(key_schema, true));
+  std::unique_ptr<storage::Tuple> key1(new storage::Tuple(key_schema, true));
+  std::unique_ptr<storage::Tuple> key2(new storage::Tuple(key_schema, true));
+
+  std::unique_ptr<storage::Tuple> keynonce(new storage::Tuple(key_schema, true));
+
+  keynonce->SetValue(0, ValueFactory::GetIntegerValue(1000), pool);
+  keynonce->SetValue(1, ValueFactory::GetStringValue("f"), pool);
+
+  key0->SetValue(0, ValueFactory::GetIntegerValue(100), pool);
+  key0->SetValue(1, ValueFactory::GetStringValue("a"), pool);
+  key1->SetValue(0, ValueFactory::GetIntegerValue(100), pool);
+  key1->SetValue(1, ValueFactory::GetStringValue("b"), pool);
+  key2->SetValue(0, ValueFactory::GetIntegerValue(100), pool);
+  key2->SetValue(1, ValueFactory::GetStringValue("c"), pool);
+
+  locations = index->ScanKey(keynonce.get());
+  EXPECT_EQ(locations.size(), 0);
+
+  locations = index->ScanKey(key0.get());
+  EXPECT_EQ(locations.size(), 0);
+
+  locations = index->ScanKey(key1.get());
+  EXPECT_EQ(locations.size(), 2 * num_threads);
+
+  locations = index->ScanKey(key2.get());
+  EXPECT_EQ(locations.size(), 1 * num_threads);
+
+
+  delete tuple_schema;
+}
+
+TEST(IndexTests, MultiThreadedStressTest) {
+  auto pool = TestingHarness::GetInstance().GetTestingPool();
+  std::vector<ItemPointer> locations;
+
+  // INDEX
+  std::unique_ptr<index::Index> index(BuildIndex());
+
+  // Parallel Test
+  size_t num_threads = 4;
+  size_t scale_factor = 10;
+  LaunchParallelTest(num_threads, InsertTest, index.get(), pool, scale_factor);
+  LaunchParallelTest(num_threads, DeleteTest, index.get(), pool, scale_factor);
+
+  std::unique_ptr<storage::Tuple> key0(new storage::Tuple(key_schema, true));
+  std::unique_ptr<storage::Tuple> key1(new storage::Tuple(key_schema, true));
+  std::unique_ptr<storage::Tuple> key2(new storage::Tuple(key_schema, true));
+
+  std::unique_ptr<storage::Tuple> keynonce(new storage::Tuple(key_schema, true));
+
+  keynonce->SetValue(0, ValueFactory::GetIntegerValue(1000), pool);
+  keynonce->SetValue(1, ValueFactory::GetStringValue("f"), pool);
+
+  key0->SetValue(0, ValueFactory::GetIntegerValue(100), pool);
+  key0->SetValue(1, ValueFactory::GetStringValue("a"), pool);
+  key1->SetValue(0, ValueFactory::GetIntegerValue(100), pool);
+  key1->SetValue(1, ValueFactory::GetStringValue("b"), pool);
+  key2->SetValue(0, ValueFactory::GetIntegerValue(100), pool);
+  key2->SetValue(1, ValueFactory::GetStringValue("c"), pool);
+
+  locations = index->ScanKey(keynonce.get());
+  EXPECT_EQ(locations.size(), 0);
+
+  locations = index->ScanKey(key0.get());
+  EXPECT_EQ(locations.size(), 0);
+
+  locations = index->ScanKey(key1.get());
+  EXPECT_EQ(locations.size(), 2 * num_threads);
+
+  locations = index->ScanKey(key2.get());
+  EXPECT_EQ(locations.size(), 1 * num_threads);
+
+
+  delete tuple_schema;
+}
+
 
 }  // End test namespace
 }  // End peloton namespace
