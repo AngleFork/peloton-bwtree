@@ -453,39 +453,6 @@ TEST(IndexTests, DuplicateKeyTest) {
   delete tuple_schema;
 }
 
-TEST(IndexTests, ReverseIteratorTest) {
-  auto pool = TestingHarness::GetInstance().GetTestingPool();
-  std::vector<ItemPointer> locations;
-
-  // INDEX
-  std::unique_ptr<index::Index> index(BuildIndex());
-
-  // Single threaded test
-  size_t scale_factor = 10;
-  LaunchParallelTest(1, InsertReverseTest, index.get(), pool, scale_factor);
-
-  std::vector<Value> values = {ValueFactory::GetIntegerValue(0), ValueFactory::GetIntegerValue(9)};
-  std::vector<oid_t> column_ids = {0, 0};
-  std::vector<ExpressionType> exprs = {EXPRESSION_TYPE_COMPARE_GREATERTHAN, EXPRESSION_TYPE_COMPARE_LESSTHANOREQUALTO};
-
-  locations = index->Scan(values, column_ids, exprs, SCAN_DIRECTION_TYPE_FORWARD);
-  EXPECT_EQ(locations.size(), 9);
-
-  std::vector<ItemPointer> items = {item0, item1, item2};
-  for(size_t i = 0; i < locations.size(); i++) {
-    EXPECT_EQ(locations[i].block, items[i % 3].block);
-  }
-
-  locations = index->Scan(values, column_ids, exprs, SCAN_DIRECTION_TYPE_BACKWARD);
-  EXPECT_EQ(locations.size(), 9);
-
-  for(size_t i = 0; i < locations.size(); i++) {
-    EXPECT_EQ(locations[i].block, items[2- ((i + 2) % 3)].block);
-  }
-
-  delete tuple_schema;
-}
-
 TEST(IndexTests, MultiThreadedInsertTest) {
   auto pool = TestingHarness::GetInstance().GetTestingPool();
   std::vector<ItemPointer> locations;
