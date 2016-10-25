@@ -4,8 +4,11 @@
 
 The project uses **autotools** to build. Run ./bootstrap to reproduce auto files. 
 
-    1.autoscan (autoconf): 扫描源代码以搜寻普通的可移植性问题，比如检查编译器，库，头文件等，生成文件configure.scan,它是configure.ac的一个雏形。
-    2.aclocal (automake):根据已经安装的宏，用户定义宏和acinclude.m4文件中的宏将configure.ac文件所需要的宏集中定义到文件 aclocal.m4中。aclocal是一个perl 脚本程序，它的定义是：“aclocal - create aclocal.m4 by scanning configure.ac”
+    1.autoscan (autoconf): 扫描源代码以搜寻普通的可移植性问题，比如检查编译器，库，
+                           头文件等，生成文件configure.scan,它是configure.ac的一个雏形。
+    2.aclocal (automake):根据已经安装的宏，用户定义宏和acinclude.m4文件中的宏将configure.ac
+                         文件所需要的宏集中定义到文件 aclocal.m4中。aclocal是一个perl 
+                         脚本程序，它的定义是：“aclocal - create aclocal.m4 by scanning configure.ac”
     user input files   optional input     process          output files
     ================   ==============     =======          ============
      
@@ -26,7 +29,10 @@ The project uses **autotools** to build. Run ./bootstrap to reproduce auto files
                                          .----------,
     configure.ac ----------------------->|autoheader|----> autoconfig.h.in
                                          `----------'
-    4.automake: automake将Makefile.am中定义的结构建立Makefile.in，然后configure脚本将生成的Makefile.in文件转换为Makefile。如果在configure.ac中定义了一些特殊的宏，比如AC_PROG_LIBTOOL，它会调用libtoolize，否则它会自己产生config.guess和config.sub
+    4.automake: automake将Makefile.am中定义的结构建立Makefile.in，然后configure脚本将生成的
+                Makefile.in文件转换为Makefile。如果在configure.ac中定义了一些特殊
+                的宏，比如AC_PROG_LIBTOOL，它会调用libtoolize，否则它会自己产生config.guess
+                和config.sub
      
     user input files   optional input   processes          output files
     ================   ==============   =========          ============
